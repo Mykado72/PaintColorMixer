@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <title>ChromaMix</title>
+    <script>
+        // GitHub Pages SPA redirect
+        // Redirige toutes les 404 vers index.html en préservant le chemin
+        // pour que Blazor Router puisse le gérer.
+        var l = window.location;
+        l.replace(
+            l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+            l.pathname.split('/').slice(0, 1).join('/') +
+            '/?p=/' + l.pathname.slice(1).replace(/&/g, '~and~') +
+            (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+            l.hash
+        );
+    </script>
+</head>
+<body>Redirection…</body>
+</html>

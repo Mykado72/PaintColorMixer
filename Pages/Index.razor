@@ -1,0 +1,336 @@
+@page "/"
+@using ColorMixer.Models
+@inject IJSRuntime JS
+
+<PageTitle>ChromaMix — Calculateur de mélanges de peinture</PageTitle>
+
+<div class="app-shell">
+    <header class="app-header">
+        <div class="logo">
+            <span class="logo-icon">◈</span>
+            <span class="logo-text">ChromaMix</span>
+        </div>
+        <p class="tagline">Calculateur de formules de mélange de peinture</p>
+    </header>
+
+    <main class="main-layout">
+        <!-- GAUCHE : Roue chromatique -->
+        <section class="panel wheel-panel">
+            <h2 class="panel-title">Sélection de couleur</h2>
+
+            <div class="wheel-wrapper">
+                <canvas id="colorWheel" width="340" height="340"
+                        @onmousemove="OnWheelMouseMove"
+                        @onclick="OnWheelClick"
+                        @onmouseleave="OnWheelMouseLeave"
+                        style="cursor:crosshair; border-radius:50%;" />
+                @if (isHovering)
+                {
+                    <div class="cursor-preview" style="background:@HoverColorHex; left:@(hoverX-14)px; top:@(hoverY-14)px;"></div>
+                }
+            </div>
+
+            <div class="sliders-group">
+                <div class="slider-row">
+                    <label>Saturation</label>
+                    <input type="range" min="0" max="100" step="1"
+                           value="@saturation"
+                           @oninput="OnSaturationChange"
+                           class="styled-slider saturation-slider" />
+                    <span class="slider-val">@saturation%</span>
+                </div>
+                <div class="slider-row">
+                    <label>Luminosité</label>
+                    <input type="range" min="5" max="95" step="1"
+                           value="@lightness"
+                           @oninput="OnLightnessChange"
+                           class="styled-slider lightness-slider" />
+                    <span class="slider-val">@lightness%</span>
+                </div>
+            </div>
+
+            @if (selectedColor != null)
+            {
+                <div class="selected-color-card">
+                    <div class="color-swatch large" style="background:@selectedColor.Hex;"></div>
+                    <div class="color-info">
+                        <div class="color-hex">@selectedColor.Hex</div>
+                        <div class="color-hsl">T : @selectedColor.H°  S : @selectedColor.S%  L : @selectedColor.L%</div>
+                        <div class="color-rgb">RVB(@selectedColor.R, @selectedColor.G, @selectedColor.B)</div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="placeholder-card">
+                    <span>Cliquez sur la roue pour sélectionner une couleur</span>
+                </div>
+            }
+        </section>
+
+        <!-- CENTRE : Sélection de marque -->
+        <section class="panel brand-panel">
+            <h2 class="panel-title">Marque de peinture</h2>
+            <div class="brand-tabs">
+                @foreach (var brand in PaintDatabase.Brands)
+                {
+                    <button class="brand-tab @(selectedBrand == brand.Name ? "active" : "")"
+                            @onclick="() => SelectBrand(brand.Name)">
+                        @brand.Name
+                    </button>
+                }
+            </div>
+
+            @if (currentBrand != null)
+            {
+                <div class="palette-grid">
+                    @foreach (var paint in currentBrand.Colors)
+                    {
+                        <div class="palette-chip" title="@paint.Name"
+                             style="background:@paint.Hex; border:@(IsColorInMix(paint) ? "3px solid white" : "2px solid transparent");">
+                        </div>
+                    }
+                </div>
+                <p class="brand-note">@currentBrand.Colors.Count couleurs disponibles</p>
+            }
+        </section>
+
+        <!-- DROITE : Résultats de mélange -->
+        <section class="panel results-panel">
+            <h2 class="panel-title">Formules de mélange</h2>
+
+            @if (selectedColor == null)
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">🎨</div>
+                    <p>Sélectionnez une couleur sur la roue<br/>pour obtenir les formules de mélange</p>
+                </div>
+            }
+            else if (mixResult == null)
+            {
+                <div class="empty-state">
+                    <div class="empty-icon">⚙️</div>
+                    <p>Calcul des formules en cours…</p>
+                </div>
+            }
+            else
+            {
+                <!-- Couleur cible -->
+                <div class="target-row">
+                    <span class="target-label">Cible</span>
+                    <div class="color-swatch sm" style="background:@selectedColor.Hex;"></div>
+                    <span class="hex-tag">@selectedColor.Hex</span>
+                </div>
+
+                <!-- Mélange 2 couleurs -->
+                <div class="formula-card">
+                    <div class="formula-header">
+                        <span class="badge two">2 Couleurs</span>
+                        <span class="delta-badge @DeltaBadgeClass(mixResult.Mix2.DeltaE)">
+                            ΔE = @mixResult.Mix2.DeltaE.ToString("0.0")
+                        </span>
+                    </div>
+
+                    @foreach (var comp in mixResult.Mix2.Components)
+                    {
+                        <div class="mix-component">
+                            <div class="comp-swatch" style="background:@comp.Paint.Hex;"></div>
+                            <div class="comp-name">@comp.Paint.Name</div>
+                            <div class="comp-bar-wrap">
+                                <div class="comp-bar" style="width:@comp.Ratio%%; background:@comp.Paint.Hex;"></div>
+                            </div>
+                            <div class="comp-pct">@comp.Ratio.ToString("0")%</div>
+                        </div>
+                    }
+
+                    <div class="result-compare">
+                        <div class="compare-block">
+                            <div class="color-swatch sm" style="background:@selectedColor.Hex;"></div>
+                            <span>Cible</span>
+                        </div>
+                        <div class="compare-arrow">→</div>
+                        <div class="compare-block">
+                            <div class="color-swatch sm" style="background:@mixResult.Mix2.ResultHex;"></div>
+                            <span>Résultat</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mélange 3 couleurs -->
+                <div class="formula-card">
+                    <div class="formula-header">
+                        <span class="badge three">3 Couleurs</span>
+                        <span class="delta-badge @DeltaBadgeClass(mixResult.Mix3.DeltaE)">
+                            ΔE = @mixResult.Mix3.DeltaE.ToString("0.0")
+                        </span>
+                    </div>
+
+                    @foreach (var comp in mixResult.Mix3.Components)
+                    {
+                        <div class="mix-component">
+                            <div class="comp-swatch" style="background:@comp.Paint.Hex;"></div>
+                            <div class="comp-name">@comp.Paint.Name</div>
+                            <div class="comp-bar-wrap">
+                                <div class="comp-bar" style="width:@comp.Ratio%%; background:@comp.Paint.Hex;"></div>
+                            </div>
+                            <div class="comp-pct">@comp.Ratio.ToString("0")%</div>
+                        </div>
+                    }
+
+                    <div class="result-compare">
+                        <div class="compare-block">
+                            <div class="color-swatch sm" style="background:@selectedColor.Hex;"></div>
+                            <span>Cible</span>
+                        </div>
+                        <div class="compare-arrow">→</div>
+                        <div class="compare-block">
+                            <div class="color-swatch sm" style="background:@mixResult.Mix3.ResultHex;"></div>
+                            <span>Résultat</span>
+                        </div>
+                    </div>
+                </div>
+
+                <p class="delta-legend">ΔE : &lt;2 Excellent · &lt;5 Bon · &lt;10 Acceptable · >10 Élevé</p>
+            }
+        </section>
+    </main>
+</div>
+
+@code {
+    // ─── État ────────────────────────────────────────────────────────────────
+    private ColorInfo? selectedColor;
+    private MixResult?  mixResult;
+    private string      selectedBrand = "Vallejo";
+    private PaintBrand? currentBrand;
+
+    // Teinte mémorisée (0–360) lors du dernier clic — pour recalculer
+    // quand les sliders changent sans re-cliquer sur la roue.
+    private double selectedHue = 0;
+
+    private int saturation = 100;
+    private int lightness  = 50;
+
+    private bool       isHovering;
+    private double     hoverX, hoverY;
+    private ColorInfo? hoverColor;
+
+    private string HoverColorHex => hoverColor?.Hex ?? "#fff";
+
+    // ─── Cycle de vie ────────────────────────────────────────────────────────
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            currentBrand = PaintDatabase.Brands.FirstOrDefault(b => b.Name == selectedBrand);
+            await RedrawWheel();
+        }
+    }
+
+    // ─── Redessine la roue avec les valeurs courantes des sliders ────────────
+    private async Task RedrawWheel()
+        => await JS.InvokeVoidAsync("chromaMix.drawWheel", "colorWheel", saturation, lightness);
+
+    // ─── Marque ──────────────────────────────────────────────────────────────
+    private void SelectBrand(string name)
+    {
+        selectedBrand = name;
+        currentBrand  = PaintDatabase.Brands.FirstOrDefault(b => b.Name == name);
+        if (selectedColor != null) ComputeMix();
+        StateHasChanged();
+    }
+
+    private bool IsColorInMix(PaintColor p) =>
+        mixResult?.Mix2.Components.Any(c => c.Paint.Name == p.Name) == true ||
+        mixResult?.Mix3.Components.Any(c => c.Paint.Name == p.Name) == true;
+
+    // ─── Interactions avec la roue ───────────────────────────────────────────
+    private async Task OnWheelMouseMove(MouseEventArgs e)
+    {
+        isHovering = true;
+        hoverX = e.OffsetX; hoverY = e.OffsetY;
+
+        // Aperçu : teinte géométrique + S/L courants
+        double hue = await JS.InvokeAsync<double>("chromaMix.getHueAt", "colorWheel", e.OffsetX, e.OffsetY);
+        hoverColor = hue >= 0 ? ColorFromHSL(hue, saturation, lightness) : null;
+        StateHasChanged();
+    }
+
+    private async Task OnWheelClick(MouseEventArgs e)
+    {
+        double hue = await JS.InvokeAsync<double>("chromaMix.getHueAt", "colorWheel", e.OffsetX, e.OffsetY);
+        if (hue < 0) return; // clic hors de la roue
+
+        selectedHue   = hue;
+        selectedColor = ColorFromHSL(hue, saturation, lightness);
+        ComputeMix();
+        StateHasChanged();
+    }
+
+    private void OnWheelMouseLeave(MouseEventArgs e)
+    {
+        isHovering = false;
+        StateHasChanged();
+    }
+
+    // ─── Sliders ─────────────────────────────────────────────────────────────
+    private async Task OnSaturationChange(ChangeEventArgs e)
+    {
+        saturation = int.Parse(e.Value!.ToString()!);
+        await RedrawWheel();           // ← redessine la roue immédiatement
+        RefreshSelectedColor();
+    }
+
+    private async Task OnLightnessChange(ChangeEventArgs e)
+    {
+        lightness = int.Parse(e.Value!.ToString()!);
+        await RedrawWheel();           // ← redessine la roue immédiatement
+        RefreshSelectedColor();
+    }
+
+    /// <summary>
+    /// Recalcule la couleur sélectionnée avec la teinte mémorisée + nouveaux S/L.
+    /// </summary>
+    private void RefreshSelectedColor()
+    {
+        if (selectedColor == null) return;
+        selectedColor = ColorFromHSL(selectedHue, saturation, lightness);
+        ComputeMix();
+        StateHasChanged();
+    }
+
+    // ─── Moteur de mélange ────────────────────────────────────────────────────
+    private void ComputeMix()
+    {
+        if (selectedColor == null || currentBrand == null) { mixResult = null; return; }
+        mixResult = MixingEngine.Compute(selectedColor, currentBrand.Colors);
+    }
+
+    // ─── Utilitaires ─────────────────────────────────────────────────────────
+    private string DeltaBadgeClass(double d) =>
+        d < 2 ? "excellent" : d < 5 ? "good" : d < 10 ? "fair" : "poor";
+
+    /// <summary>Construit un ColorInfo à partir de H (0–360), S (0–100), L (0–100).</summary>
+    private static ColorInfo ColorFromHSL(double h360, int s100, int l100)
+    {
+        var (r, g, b) = HslToRgb(h360 / 360.0, s100 / 100.0, l100 / 100.0);
+        return new ColorInfo(r, g, b);
+    }
+
+    private static (int r, int g, int b) HslToRgb(double h, double s, double l)
+    {
+        if (s == 0) { int v = (int)Math.Round(l * 255); return (v, v, v); }
+        double q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        double p = 2 * l - q;
+        return (Hue(p, q, h + 1.0/3), Hue(p, q, h), Hue(p, q, h - 1.0/3));
+
+        static int Hue(double p, double q, double t)
+        {
+            if (t < 0) t += 1; if (t > 1) t -= 1;
+            double v = t < 1.0/6 ? p + (q-p)*6*t
+                     : t < 1.0/2 ? q
+                     : t < 2.0/3 ? p + (q-p)*(2.0/3-t)*6
+                     : p;
+            return (int)Math.Round(v * 255);
+        }
+    }
+}
