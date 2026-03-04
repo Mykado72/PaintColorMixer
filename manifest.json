@@ -1,0 +1,34 @@
+{
+  "name": "ChromaMix — Calculateur de mélanges",
+  "short_name": "ChromaMix",
+  "description": "Sélectionnez une couleur sur la roue chromatique et obtenez les formules de mélange pour vos peintures.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0e0e12",
+  "theme_color": "#0e0e12",
+  "lang": "fr",
+  "orientation": "any",
+  "categories": ["utilities", "art"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Ouvrir ChromaMix",
+      "url": "./",
+      "description": "Lancer le calculateur de mélanges"
+    }
+  ]
+}
