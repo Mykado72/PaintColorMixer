@@ -1,7 +1,7 @@
 {
   "mainAssemblyName": "ColorMixer",
   "resources": {
-    "hash": "sha256-nSf+5bynZYlK6vFz0Bu5L2U9R7zVuF6MPnaIoSGaSZI=",
+    "hash": "sha256-ZNEA7/ZdFMwEIQEdDFDTIGXS8gX2UZse8bPi6qubPhY=",
     "jsModuleNative": {
       "dotnet.native.js": "sha256-4g0GzvOXSwZvTLca4PrWJkoeltz+V9IF/hEFDcnVros="
     },
@@ -209,10 +209,10 @@
       "mscorlib.wasm": "sha256-OWQk7msdg0kG9vfJqVNUrPJ8JkyUipH2afbnYJLsKjk=",
       "netstandard.wasm": "sha256-+Ya7AWY6kwjwbQw9fHax9L8Qnn+UZKQF05aZE4ZOXiY=",
       "System.Private.CoreLib.wasm": "sha256-ouVBjy2oz9hC308fAFLns0mvmtyaeUDXt3C5DAk1muc=",
-      "ColorMixer.wasm": "sha256-R1chnwghV8fyvNdEZTSw+qjP3IQikyxi5/N6U+izjw4="
+      "ColorMixer.wasm": "sha256-Gh5o0iKvOsvjfVCtkfQofSWMM0hgzbzKvXx6jqW+DL8="
     },
     "pdb": {
-      "ColorMixer.pdb": "sha256-LBqQRkYCXeJ4k43Wb86lRao6Bexo5i62/MkpCCCFHNw="
+      "ColorMixer.pdb": "sha256-QFCKVHCR8jaedDbNWLMYiaD/N8Ir+cHZZF3/jSvMXJ4="
     }
   },
   "cacheBootResources": true,
