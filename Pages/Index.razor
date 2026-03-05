@@ -2,52 +2,198 @@
 @using ColorMixer.Models
 @inject IJSRuntime JS
 
-<PageTitle>ChromaMix — Calculateur de mélanges de peinture</PageTitle>
+<PageTitle>ChromaMix — Calculateur de mélanges</PageTitle>
 
 <div class="app-shell">
+
+@if (paintMode == null)
+{
+    <!-- ══ ÉCRAN D'ACCUEIL ══════════════════════════════════════════════════ -->
+    <div class="welcome-screen">
+        <div class="welcome-inner">
+            <div class="welcome-logo">
+                <span class="logo-icon">◈</span>
+                <span class="logo-text">ChromaMix</span>
+            </div>
+            <p class="welcome-sub">Calculateur de formules de mélange de peinture</p>
+            <p class="welcome-question">Quel type de peinture utilisez-vous ?</p>
+
+            <div class="mode-cards">
+                <button class="mode-card opaque-card" @onclick='() => SelectMode(PaintMode.Opaque)'>
+                    <div class="mode-icon">🎨</div>
+                    <div class="mode-title">Peinture opaque</div>
+                    <div class="mode-desc">Acrylique · Huile · Gouache · Maquette</div>
+                    <div class="mode-brands">Vallejo · Citadel · Liquitex</div>
+                </button>
+                <button class="mode-card watercolor-card" @onclick='() => SelectMode(PaintMode.Watercolor)'>
+                    <div class="mode-icon">💧</div>
+                    <div class="mode-title">Aquarelle</div>
+                    <div class="mode-desc">Transparente · Sur papier · Dilution à l'eau</div>
+                    <div class="mode-brands">Mijello · Daler-Rowney</div>
+                </button>
+            </div>
+        </div>
+        <p class="welcome-dedication">Pour Laetitia 🎨</p>
+    </div>
+}
+else
+{
+    <!-- ══ INTERFACE PRINCIPALE ═════════════════════════════════════════════ -->
     <header class="app-header">
         <div class="logo">
             <span class="logo-icon">◈</span>
             <span class="logo-text">ChromaMix</span>
         </div>
-        <p class="tagline">Calculateur de formules de mélange de peinture</p>
+        <div class="mode-badge @(paintMode == PaintMode.Watercolor ? "wc" : "op")">
+            @(paintMode == PaintMode.Watercolor ? "💧 Aquarelle" : "🎨 Opaque")
+        </div>
+        <button class="change-mode-btn" @onclick="ResetMode">Changer de mode</button>
     </header>
 
     <main class="main-layout">
-        <!-- GAUCHE : Roue chromatique -->
+
+        <!-- ── GAUCHE : Roue ────────────────────────────────────────────────── -->
         <section class="panel wheel-panel">
             <h2 class="panel-title">Sélection de couleur</h2>
 
-            <div class="wheel-wrapper">
-                <canvas id="colorWheel" width="340" height="340"
-                        @onmousemove="OnWheelMouseMove"
-                        @onclick="OnWheelClick"
-                        @onmouseleave="OnWheelMouseLeave"
-                        style="cursor:crosshair; border-radius:50%;" />
-                @if (isHovering)
-                {
-                    <div class="cursor-preview" style="background:@HoverColorHex; left:@(hoverX-14)px; top:@(hoverY-14)px;"></div>
-                }
+            <!-- Onglets Roue / Sliders -->
+            <div class="picker-tabs">
+                <button class="picker-tab @(pickerTab == 0 ? "active" : "")" @onclick='() => SwitchTab(0)'>🎡 Roue</button>
+                <button class="picker-tab @(pickerTab == 1 ? "active" : "")" @onclick='() => SwitchTab(1)'>🎚 Sliders</button>
+                <button class="picker-tab @(pickerTab == 2 ? "active" : "")" @onclick='() => SwitchTab(2)'>🔬 Pipette</button>
             </div>
 
-            <div class="sliders-group">
-                <div class="slider-row">
-                    <label>Saturation</label>
-                    <input type="range" min="0" max="100" step="1"
-                           value="@saturation"
-                           @oninput="OnSaturationChange"
-                           class="styled-slider saturation-slider" />
-                    <span class="slider-val">@saturation%</span>
+            <!-- TAB 0 : Roue chromatique -->
+            @if (pickerTab == 0)
+            {
+                <div class="wheel-wrapper">
+                    <canvas id="colorWheel" width="340" height="340"
+                            @onmousemove="OnWheelMouseMove"
+                            @onclick="OnWheelClick"
+                            @onmouseleave="OnWheelMouseLeave"
+                            style="cursor:crosshair; border-radius:50%;" />
+                    <!-- Canvas loupe — toujours présent, déplacé via JS -->
+                    <canvas id="wheelZoomCanvas" class="wheel-zoom-canvas" style="display:none;"></canvas>
                 </div>
-                <div class="slider-row">
-                    <label>Luminosité</label>
-                    <input type="range" min="5" max="95" step="1"
-                           value="@lightness"
-                           @oninput="OnLightnessChange"
-                           class="styled-slider lightness-slider" />
-                    <span class="slider-val">@lightness%</span>
+                <div class="sliders-group">
+                    <div class="slider-row">
+                        <label>Saturation</label>
+                        <input type="range" min="0" max="100" step="1" value="@saturation"
+                               @oninput="OnSaturationChange" class="styled-slider saturation-slider" />
+                        <span class="slider-val">@saturation%</span>
+                    </div>
+                    <div class="slider-row">
+                        <label>Luminosité</label>
+                        <input type="range" min="5" max="95" step="1" value="@lightness"
+                               @oninput="OnLightnessChange" class="styled-slider lightness-slider" />
+                        <span class="slider-val">@lightness%</span>
+                    </div>
                 </div>
-            </div>
+            }
+
+            <!-- TAB 1 : Sliders H/S/L grands (mobile-friendly) -->
+            @if (pickerTab == 1)
+            {
+                <div class="hsl-picker">
+                    <!-- Prévisualisation live -->
+                    <div class="hsl-preview" style="background:@(selectedColor?.Hex ?? HslPreviewHex);">
+                        <span class="hsl-preview-hex">@(selectedColor?.Hex ?? HslPreviewHex)</span>
+                    </div>
+
+                    <div class="hsl-sliders">
+                        <div class="hsl-row">
+                            <span class="hsl-label">T</span>
+                            <div class="hsl-track hue-track">
+                                <input type="range" min="0" max="360" step="1" value="@hslHue"
+                                       @oninput="OnHueSliderChange" class="hsl-input hue-input" />
+                            </div>
+                            <span class="hsl-val">@hslHue°</span>
+                        </div>
+                        <div class="hsl-row">
+                            <span class="hsl-label">S</span>
+                            <div class="hsl-track" style="background: linear-gradient(to right, hsl(@hslHue,0%,50%), hsl(@hslHue,100%,50%));">
+                                <input type="range" min="0" max="100" step="1" value="@hslSat"
+                                       @oninput="OnSatSliderChange" class="hsl-input" />
+                            </div>
+                            <span class="hsl-val">@hslSat%</span>
+                        </div>
+                        <div class="hsl-row">
+                            <span class="hsl-label">L</span>
+                            <div class="hsl-track" style="background: linear-gradient(to right, #000, hsl(@hslHue,@(hslSat)%,50%), #fff);">
+                                <input type="range" min="0" max="100" step="1" value="@hslLit"
+                                       @oninput="OnLitSliderChange" class="hsl-input" />
+                            </div>
+                            <span class="hsl-val">@hslLit%</span>
+                        </div>
+                    </div>
+
+                    <button class="hsl-confirm" @onclick="ConfirmHslColor">
+                        Sélectionner cette couleur
+                    </button>
+                </div>
+            }
+
+            <!-- TAB 2 : Pipette avec zoom -->
+            @if (pickerTab == 2)
+            {
+                <div class="pipette-panel">
+                    <p class="pipette-hint">Importez une image puis pointez la couleur à extraire</p>
+
+                    <label class="pipette-upload">
+                        <InputFile id="pipetteFileInput" accept="image/*" OnChange="OnImageUpload" style="display:none;" />
+                        <span>📁 Choisir une image</span>
+                    </label>
+
+                    @if (pipetteImageData != null)
+                    {
+                        <div class="pipette-canvas-wrap" id="pipette-wrap">
+                            <canvas id="pipetteCanvas"
+                                    @onmousemove="OnPipetteMouseMove"
+                                    @onclick="OnPipetteClick"
+                                    @ontouchmove:preventDefault="true"
+                                    @ontouchmove="OnPipetteTouchMove"
+                                    @ontouchend="OnPipetteTouchEnd"
+                                    style="cursor:none; touch-action:none;" />
+                            <!-- Loupe -->
+                            <canvas id="zoomCanvas" class="zoom-lens" style="left:@(zoomX)px; top:@(zoomY)px;" />
+                            <!-- Croix centrale de la loupe -->
+                            <div class="zoom-crosshair" style="left:@(zoomX)px; top:@(zoomY)px;"></div>
+                        </div>
+
+                        @if (pipetteColor != null)
+                        {
+                            <div class="pipette-result">
+                                <div class="pipette-swatch" style="background:@pipetteColor.Hex;"></div>
+                                <div class="pipette-info">
+                                    <span class="pipette-hex">@pipetteColor.Hex</span>
+                                    <span class="pipette-rgb">RVB(@pipetteColor.R, @pipetteColor.G, @pipetteColor.B)</span>
+                                </div>
+                                <button class="pipette-confirm" @onclick="ConfirmPipetteColor">✓ Utiliser</button>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="pipette-placeholder">
+                            <span>🖼️</span>
+                            <p>Chargez une photo, un nuancier ou toute image pour en extraire une couleur avec zoom</p>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Dilution aquarelle (toujours visible) -->
+            @if (paintMode == PaintMode.Watercolor)
+            {
+                <div class="sliders-group" style="padding-top:0; border-top: 1px solid var(--border); margin-top: 4px;">
+                    <div class="slider-row">
+                        <label>Dilution</label>
+                        <input type="range" min="0" max="80" step="1" value="@waterRatio"
+                               @oninput="OnWaterChange" class="styled-slider water-slider" />
+                        <span class="slider-val">@waterRatio%</span>
+                    </div>
+                </div>
+            }
 
             @if (selectedColor != null)
             {
@@ -68,11 +214,11 @@
             }
         </section>
 
-        <!-- CENTRE : Sélection de marque -->
+        <!-- ── CENTRE : Marque ─────────────────────────────────────────────── -->
         <section class="panel brand-panel">
-            <h2 class="panel-title">Marque de peinture</h2>
+            <h2 class="panel-title">Marque</h2>
             <div class="brand-tabs">
-                @foreach (var brand in PaintDatabase.Brands)
+                @foreach (var brand in PaintDatabase.GetBrands(paintMode.Value))
                 {
                     <button class="brand-tab @(selectedBrand == brand.Name ? "active" : "")"
                             @onclick="() => SelectBrand(brand.Name)">
@@ -86,17 +232,35 @@
                 <div class="palette-grid">
                     @foreach (var paint in currentBrand.Colors)
                     {
-                        <div class="palette-chip" title="@paint.Name"
-                             style="background:@paint.Hex; border:@(IsColorInMix(paint) ? "3px solid white" : "2px solid transparent");">
+                        <div class="palette-chip @(IsColorInMix(paint) ? "in-mix" : "") @(IsPaletteSelected(paint) ? "selected-chip" : "")"
+                             title="@GetChipTitle(paint)"
+                             style="background:@paint.Hex;"
+                             @onclick="() => SelectPaletteColor(paint)">
+                            @if (paintMode == PaintMode.Watercolor)
+                            {
+                                <span class="chip-icons">
+                                    @if (paint.IsTransparent) { <span title="Transparent">◎</span> }
+                                    @if (paint.IsGranulating) { <span title="Granulant">⋮</span>  }
+                                    @if (paint.IsStaining)    { <span title="Tachant">✦</span>    }
+                                </span>
+                            }
                         </div>
                     }
                 </div>
                 <p class="brand-note">@currentBrand.Colors.Count couleurs disponibles</p>
+                @if (paintMode == PaintMode.Watercolor)
+                {
+                    <div class="wc-legend">
+                        <span>◎ Transparent</span>
+                        <span>⋮ Granulant</span>
+                        <span>✦ Tachant</span>
+                    </div>
+                }
             }
         </section>
 
-        <!-- DROITE : Résultats de mélange -->
-        <section class="panel results-panel">
+        <!-- ── DROITE : Résultats ───────────────────────────────────────────── -->
+        <section class="panel results-panel" id="results-panel">
             <h2 class="panel-title">Formules de mélange</h2>
 
             @if (selectedColor == null)
@@ -115,12 +279,13 @@
             }
             else
             {
-                <!-- Couleur cible -->
-                <div class="target-row">
-                    <span class="target-label">Cible</span>
-                    <div class="color-swatch sm" style="background:@selectedColor.Hex;"></div>
-                    <span class="hex-tag">@selectedColor.Hex</span>
-                </div>
+                @if (paintMode == PaintMode.Watercolor)
+                {
+                    <div class="wc-info-bar">
+                        <span class="wc-info-icon">💧</span>
+                        <span>Dilution : <strong>@waterRatio%</strong> eau — les couleurs sèchent plus claires</span>
+                    </div>
+                }
 
                 <!-- Mélange 2 couleurs -->
                 <div class="formula-card">
@@ -130,29 +295,45 @@
                             ΔE = @mixResult.Mix2.DeltaE.ToString("0.0")
                         </span>
                     </div>
-
                     @foreach (var comp in mixResult.Mix2.Components)
                     {
                         <div class="mix-component">
                             <div class="comp-swatch" style="background:@comp.Paint.Hex;"></div>
-                            <div class="comp-name">@comp.Paint.Name</div>
-                            <div class="comp-bar-wrap">
-                                <div class="comp-bar" style="width:@comp.Ratio%%; background:@comp.Paint.Hex;"></div>
+                            <div class="comp-details">
+                                <div class="comp-name-row">
+                                    <span class="comp-name">@comp.Paint.Name</span>
+                                    <span class="comp-pct">@comp.Ratio.ToString("0")%</span>
+                                </div>
+                                @if (paintMode == PaintMode.Watercolor && comp.Paint.PigmentCode != "")
+                                {
+                                    <div class="comp-pigment">@comp.Paint.PigmentCode</div>
+                                }
                             </div>
-                            <div class="comp-pct">@comp.Ratio.ToString("0")%</div>
+                            <div class="comp-bar-wrap">
+                                <div class="comp-bar" style="@($"width:{comp.Ratio:0}%; background:{comp.Paint.Hex};")"></div>
+                            </div>
                         </div>
                     }
-
                     <div class="result-compare">
-                        <div class="compare-block">
-                            <div class="color-swatch sm" style="background:@selectedColor.Hex;"></div>
+                        <div class="compare-duo">
+                            <div class="compare-swatch" style="background:@selectedColor.Hex;"></div>
+                            <div class="compare-swatch" style="background:@mixResult.Mix2.ResultHex;"></div>
+                        </div>
+                        <div class="compare-labels">
                             <span>Cible</span>
+                            <span>@(paintMode == PaintMode.Watercolor ? "Mouillé" : "Résultat")</span>
                         </div>
-                        <div class="compare-arrow">→</div>
-                        <div class="compare-block">
-                            <div class="color-swatch sm" style="background:@mixResult.Mix2.ResultHex;"></div>
-                            <span>Résultat</span>
-                        </div>
+                        @if (paintMode == PaintMode.Watercolor)
+                        {
+                            <div class="compare-duo">
+                                <div class="compare-swatch" style="background:@selectedColor.Hex;"></div>
+                                <div class="compare-swatch" style="background:@mixResult.Mix2.DriedHex;"></div>
+                            </div>
+                            <div class="compare-labels">
+                                <span>Cible</span>
+                                <span>Sec</span>
+                            </div>
+                        }
                     </div>
                 </div>
 
@@ -164,111 +345,206 @@
                             ΔE = @mixResult.Mix3.DeltaE.ToString("0.0")
                         </span>
                     </div>
-
                     @foreach (var comp in mixResult.Mix3.Components)
                     {
                         <div class="mix-component">
                             <div class="comp-swatch" style="background:@comp.Paint.Hex;"></div>
-                            <div class="comp-name">@comp.Paint.Name</div>
-                            <div class="comp-bar-wrap">
-                                <div class="comp-bar" style="width:@comp.Ratio%%; background:@comp.Paint.Hex;"></div>
+                            <div class="comp-details">
+                                <div class="comp-name-row">
+                                    <span class="comp-name">@comp.Paint.Name</span>
+                                    <span class="comp-pct">@comp.Ratio.ToString("0")%</span>
+                                </div>
+                                @if (paintMode == PaintMode.Watercolor && comp.Paint.PigmentCode != "")
+                                {
+                                    <div class="comp-pigment">@comp.Paint.PigmentCode</div>
+                                }
                             </div>
-                            <div class="comp-pct">@comp.Ratio.ToString("0")%</div>
+                            <div class="comp-bar-wrap">
+                                <div class="comp-bar" style="@($"width:{comp.Ratio:0}%; background:{comp.Paint.Hex};")"></div>
+                            </div>
                         </div>
                     }
-
                     <div class="result-compare">
-                        <div class="compare-block">
-                            <div class="color-swatch sm" style="background:@selectedColor.Hex;"></div>
+                        <div class="compare-duo">
+                            <div class="compare-swatch" style="background:@selectedColor.Hex;"></div>
+                            <div class="compare-swatch" style="background:@mixResult.Mix3.ResultHex;"></div>
+                        </div>
+                        <div class="compare-labels">
                             <span>Cible</span>
+                            <span>@(paintMode == PaintMode.Watercolor ? "Mouillé" : "Résultat")</span>
                         </div>
-                        <div class="compare-arrow">→</div>
-                        <div class="compare-block">
-                            <div class="color-swatch sm" style="background:@mixResult.Mix3.ResultHex;"></div>
-                            <span>Résultat</span>
-                        </div>
+                        @if (paintMode == PaintMode.Watercolor)
+                        {
+                            <div class="compare-duo">
+                                <div class="compare-swatch" style="background:@selectedColor.Hex;"></div>
+                                <div class="compare-swatch" style="background:@mixResult.Mix3.DriedHex;"></div>
+                            </div>
+                            <div class="compare-labels">
+                                <span>Cible</span>
+                                <span>Sec</span>
+                            </div>
+                        }
                     </div>
                 </div>
 
                 <p class="delta-legend">ΔE : &lt;2 Excellent · &lt;5 Bon · &lt;10 Acceptable · >10 Élevé</p>
             }
         </section>
+
     </main>
+}
+
 </div>
 
 @code {
+
+    // ─── Classe retour JS ───────────────────────────────────────────────────────
+    private class WheelColor
+    {
+        public double Hue { get; set; }
+        public int    Lum { get; set; }
+    }
+
+    // ─── Mode ────────────────────────────────────────────────────────────────
+    private PaintMode? paintMode;
+
+    private async Task SelectMode(PaintMode mode)
+    {
+        paintMode     = mode;
+        selectedBrand = PaintDatabase.GetBrands(mode).First().Name;
+        currentBrand  = PaintDatabase.GetBrands(mode).First();
+        selectedColor = null;
+        mixResult     = null;
+        // Valeurs par défaut selon le mode
+        saturation = mode == PaintMode.Watercolor ? 75 : 80;
+        lightness  = mode == PaintMode.Watercolor ? 75 : 50;
+        StateHasChanged();
+        await Task.Delay(50);
+        await RedrawWheel();
+    }
+
+    private void ResetMode()
+    {
+        paintMode     = null;
+        selectedColor = null;
+        mixResult     = null;
+        StateHasChanged();
+    }
+
     // ─── État ────────────────────────────────────────────────────────────────
     private ColorInfo? selectedColor;
     private MixResult?  mixResult;
-    private string      selectedBrand = "Vallejo";
+    private string      selectedBrand = "";
     private PaintBrand? currentBrand;
-
-    // Teinte mémorisée (0–360) lors du dernier clic — pour recalculer
-    // quand les sliders changent sans re-cliquer sur la roue.
-    private double selectedHue = 0;
+    private double      selectedHue   = 0;
 
     private int saturation = 100;
     private int lightness  = 50;
+    private int waterRatio = 40;
 
     private bool       isHovering;
     private double     hoverX, hoverY;
     private ColorInfo? hoverColor;
 
-    private string HoverColorHex => hoverColor?.Hex ?? "#fff";
+    // ─── Onglet sélecteur ────────────────────────────────────────────────────
+    private int pickerTab = 0; // 0=roue, 1=sliders HSL
 
-    // ─── Cycle de vie ────────────────────────────────────────────────────────
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            currentBrand = PaintDatabase.Brands.FirstOrDefault(b => b.Name == selectedBrand);
-            await RedrawWheel();
-        }
-    }
+    // Sliders HSL indépendants (onglet 1)
+    private int hslHue = 180;
+    private int hslSat = 80;
+    private int hslLit = 50;
+    private string HslPreviewHex => ColorFromHSL(hslHue, hslSat, hslLit).Hex;
 
-    // ─── Redessine la roue avec les valeurs courantes des sliders ────────────
+    // ─── Pipette ─────────────────────────────────────────────────────────────
+    private string?    pipetteImageData = null;
+    private ColorInfo? pipetteColor     = null;
+    private double     zoomX            = -200;
+    private double     zoomY            = -200;
+
+    // ─── Roue : dessin ───────────────────────────────────────────────────────
     private async Task RedrawWheel()
-        => await JS.InvokeVoidAsync("chromaMix.drawWheel", "colorWheel", saturation, lightness);
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("chromaMix.drawWheel", "colorWheel", saturation, lightness);
+        }
+        catch { /* canvas pas encore dans le DOM */ }
+    }
 
     // ─── Marque ──────────────────────────────────────────────────────────────
     private void SelectBrand(string name)
     {
         selectedBrand = name;
-        currentBrand  = PaintDatabase.Brands.FirstOrDefault(b => b.Name == name);
+        currentBrand  = PaintDatabase.GetBrands(paintMode!.Value).FirstOrDefault(b => b.Name == name);
         if (selectedColor != null) ComputeMix();
         StateHasChanged();
+    }
+
+    private void SelectPaletteColor(PaintColor paint)
+    {
+        var ci = paint.ToColorInfo();
+        selectedColor = ci;
+        selectedHue   = ci.H;
+        saturation    = ci.S;
+        lightness     = ci.L;
+        ComputeMix();
+        StateHasChanged();
+        // Pas de scroll ici car on est sur desktop généralement,
+        // mais on le déclenche quand même pour mobile
+        _ = JS.InvokeVoidAsync("chromaMix.scrollToResults");
+    }
+
+    private bool IsPaletteSelected(PaintColor p) =>
+        selectedColor != null && p.Hex.ToUpper() == selectedColor.Hex.ToUpper();
+
+    private string GetChipTitle(PaintColor p)
+    {
+        if (paintMode == PaintMode.Watercolor && p.PigmentCode != "")
+            return $"{p.Name} ({p.PigmentCode})";
+        return p.Name;
     }
 
     private bool IsColorInMix(PaintColor p) =>
         mixResult?.Mix2.Components.Any(c => c.Paint.Name == p.Name) == true ||
         mixResult?.Mix3.Components.Any(c => c.Paint.Name == p.Name) == true;
 
-    // ─── Interactions avec la roue ───────────────────────────────────────────
+    // ─── Roue : interactions ─────────────────────────────────────────────────
     private async Task OnWheelMouseMove(MouseEventArgs e)
     {
         isHovering = true;
         hoverX = e.OffsetX; hoverY = e.OffsetY;
-
-        // Aperçu : teinte géométrique + S/L courants
-        double hue = await JS.InvokeAsync<double>("chromaMix.getHueAt", "colorWheel", e.OffsetX, e.OffsetY);
-        hoverColor = hue >= 0 ? ColorFromHSL(hue, saturation, lightness) : null;
+        try
+        {
+            var c = await JS.InvokeAsync<WheelColor?>("chromaMix.getColorAt", "colorWheel", e.OffsetX, e.OffsetY);
+            hoverColor = c != null ? ColorFromHSL(c.Hue, saturation, c.Lum) : null;
+            await JS.InvokeVoidAsync("chromaMix.drawWheelZoom", "colorWheel", "wheelZoomCanvas", e.OffsetX, e.OffsetY);
+        }
+        catch { hoverColor = null; }
         StateHasChanged();
     }
 
     private async Task OnWheelClick(MouseEventArgs e)
     {
-        double hue = await JS.InvokeAsync<double>("chromaMix.getHueAt", "colorWheel", e.OffsetX, e.OffsetY);
-        if (hue < 0) return; // clic hors de la roue
-
-        selectedHue   = hue;
-        selectedColor = ColorFromHSL(hue, saturation, lightness);
-        ComputeMix();
+        try
+        {
+            var c = await JS.InvokeAsync<WheelColor?>("chromaMix.getColorAt", "colorWheel", e.OffsetX, e.OffsetY);
+            if (c == null) return;
+            selectedHue   = c.Hue;
+            lightness     = c.Lum;   // luminosité réelle du pixel cliqué
+            selectedColor = ColorFromHSL(c.Hue, saturation, c.Lum);
+            ComputeMix();
+            StateHasChanged();
+            await JS.InvokeVoidAsync("chromaMix.scrollToResults");
+        }
+        catch { }
         StateHasChanged();
     }
 
-    private void OnWheelMouseLeave(MouseEventArgs e)
+    private async Task OnWheelMouseLeave(MouseEventArgs e)
     {
         isHovering = false;
+        hoverColor = null;
+        await JS.InvokeVoidAsync("chromaMix.hideWheelZoom", "wheelZoomCanvas");
         StateHasChanged();
     }
 
@@ -276,20 +552,24 @@
     private async Task OnSaturationChange(ChangeEventArgs e)
     {
         saturation = int.Parse(e.Value!.ToString()!);
-        await RedrawWheel();           // ← redessine la roue immédiatement
+        await RedrawWheel();
         RefreshSelectedColor();
     }
 
     private async Task OnLightnessChange(ChangeEventArgs e)
     {
         lightness = int.Parse(e.Value!.ToString()!);
-        await RedrawWheel();           // ← redessine la roue immédiatement
+        await RedrawWheel();
         RefreshSelectedColor();
     }
 
-    /// <summary>
-    /// Recalcule la couleur sélectionnée avec la teinte mémorisée + nouveaux S/L.
-    /// </summary>
+    private void OnWaterChange(ChangeEventArgs e)
+    {
+        waterRatio = int.Parse(e.Value!.ToString()!);
+        if (selectedColor != null) ComputeMix();
+        StateHasChanged();
+    }
+
     private void RefreshSelectedColor()
     {
         if (selectedColor == null) return;
@@ -298,18 +578,134 @@
         StateHasChanged();
     }
 
-    // ─── Moteur de mélange ────────────────────────────────────────────────────
+    // ─── Onglet picker ───────────────────────────────────────────────────────────
+    private async Task SwitchTab(int tab)
+    {
+        pickerTab = tab;
+        StateHasChanged();
+        if (tab == 0)
+        {
+            await Task.Delay(30);
+            await RedrawWheel();
+        }
+    }
+
+    private void OnHueSliderChange(ChangeEventArgs e)
+    {
+        hslHue = int.Parse(e.Value!.ToString()!);
+        StateHasChanged();
+    }
+
+    private void OnSatSliderChange(ChangeEventArgs e)
+    {
+        hslSat = int.Parse(e.Value!.ToString()!);
+        StateHasChanged();
+    }
+
+    private void OnLitSliderChange(ChangeEventArgs e)
+    {
+        hslLit = int.Parse(e.Value!.ToString()!);
+        StateHasChanged();
+    }
+
+    // ─── Pipette : chargement image ─────────────────────────────────────────────
+    private async Task OnImageUpload(InputFileChangeEventArgs e)
+    {
+        pipetteImageData = null;
+        pipetteColor     = null;
+        StateHasChanged();
+
+        var file = e.File;
+        if (file == null) return;
+
+        // Lire le fichier en base64 et l'envoyer au JS
+        using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+        using var ms     = new System.IO.MemoryStream();
+        await stream.CopyToAsync(ms);
+        var base64   = Convert.ToBase64String(ms.ToArray());
+        var mimeType = file.ContentType;
+        var dataUrl  = $"data:{mimeType};base64,{base64}";
+
+        var dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("chromaMix.loadPipetteFromDataUrl", dataUrl, dotNetRef);
+    }
+
+    [JSInvokable]
+    public async Task OnPipetteImageReady(string dataUrl)
+    {
+        pipetteImageData = dataUrl;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private async Task OnPipetteMouseMove(MouseEventArgs e)
+    {
+        zoomX = e.OffsetX - 80;
+        zoomY = e.OffsetY - 80;
+        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePreview", e.OffsetX, e.OffsetY);
+        if (rgb != null && rgb.Length == 3)
+            pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
+        StateHasChanged();
+    }
+
+    private async Task OnPipetteClick(MouseEventArgs e)
+    {
+        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePreview", e.OffsetX, e.OffsetY);
+        if (rgb == null || rgb.Length < 3) return;
+        pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
+        StateHasChanged();
+    }
+
+    private async Task OnPipetteTouchMove(TouchEventArgs e)
+    {
+        if (e.Touches.Length == 0) return;
+        var t   = e.Touches[0];
+        var pos = await JS.InvokeAsync<double[]>("chromaMix.getCanvasOffset", "pipetteCanvas", t.ClientX, t.ClientY);
+        if (pos == null) return;
+        zoomX = pos[0] - 80;
+        zoomY = pos[1] - 80;
+        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePreview", pos[0], pos[1]);
+        if (rgb != null && rgb.Length == 3)
+            pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
+        StateHasChanged();
+    }
+
+    private void OnPipetteTouchEnd(TouchEventArgs e) { zoomX = -200; zoomY = -200; StateHasChanged(); }
+
+    private async Task ConfirmPipetteColor()
+    {
+        if (pipetteColor == null) return;
+        selectedColor = pipetteColor;
+        selectedHue   = selectedColor.H;
+        saturation    = selectedColor.S;
+        lightness     = selectedColor.L;
+        ComputeMix();
+        StateHasChanged();
+        await JS.InvokeVoidAsync("chromaMix.scrollToResults");
+    }
+
+    private async Task ConfirmHslColor()
+    {
+        selectedHue   = hslHue;
+        saturation    = hslSat;
+        lightness     = hslLit;
+        selectedColor = ColorFromHSL(hslHue, hslSat, hslLit);
+        ComputeMix();
+        StateHasChanged();
+        await JS.InvokeVoidAsync("chromaMix.scrollToResults");
+    }
+
+    // ─── Mélange ─────────────────────────────────────────────────────────────
     private void ComputeMix()
     {
         if (selectedColor == null || currentBrand == null) { mixResult = null; return; }
-        mixResult = MixingEngine.Compute(selectedColor, currentBrand.Colors);
+        mixResult = MixingEngine.Compute(selectedColor, currentBrand.Colors, paintMode!.Value, waterRatio);
     }
 
     // ─── Utilitaires ─────────────────────────────────────────────────────────
     private string DeltaBadgeClass(double d) =>
         d < 2 ? "excellent" : d < 5 ? "good" : d < 10 ? "fair" : "poor";
 
-    /// <summary>Construit un ColorInfo à partir de H (0–360), S (0–100), L (0–100).</summary>
     private static ColorInfo ColorFromHSL(double h360, int s100, int l100)
     {
         var (r, g, b) = HslToRgb(h360 / 360.0, s100 / 100.0, l100 / 100.0);
@@ -327,7 +723,7 @@
         {
             if (t < 0) t += 1; if (t > 1) t -= 1;
             double v = t < 1.0/6 ? p + (q-p)*6*t
-                     : t < 1.0/2 ? q
+                     : t < 0.5   ? q
                      : t < 2.0/3 ? p + (q-p)*(2.0/3-t)*6
                      : p;
             return (int)Math.Round(v * 255);
