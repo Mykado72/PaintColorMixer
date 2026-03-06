@@ -2,8 +2,8 @@
 <!-- https://go.microsoft.com/fwlink/?LinkID=208121. -->
 <Project>
   <PropertyGroup>
-    <_PublishTargetUrl>C:\Users\mlehay\Downloads\ChromaMix (1)\ColorMixer\bin\Release\net8.0\browser-wasm\publish\</_PublishTargetUrl>
-    <History>True|2026-03-06T10:11:27.1274004Z||;</History>
+    <_PublishTargetUrl>C:\Users\utilisateur\Downloads\PaintColorMixer_v13\paintmixer_modified\bin\Release\net8.0\browser-wasm\publish\</_PublishTargetUrl>
+    <History>True|2026-03-06T22:19:32.1964642Z||;True|2026-03-05T22:27:54.2339789+01:00||;</History>
     <LastFailureDetails />
   </PropertyGroup>
 </Project>

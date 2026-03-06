@@ -1,215 +1,401 @@
 window.chromaMix = (() => {
     const wheels = {};
-    const isMobile = () => window.innerWidth <= 900;
 
-    function drawWheel(canvasId, saturation, lightness) {
-        saturation = saturation || 100; lightness = lightness || 50;
+    function drawWheel(canvasId, saturation = 100, lightness = 50) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) { setTimeout(() => drawWheel(canvasId, saturation, lightness), 100); return; }
         const ctx = canvas.getContext('2d');
-        const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2, outerR = cx-4;
-        const sat = saturation/100, imgData = ctx.createImageData(W,H), data = imgData.data;
-        for (let y=0;y<H;y++) for (let x=0;x<W;x++) {
-            const dx=x-cx,dy=y-cy,dist=Math.sqrt(dx*dx+dy*dy);
-            if (dist>outerR) continue;
-            let hue=Math.atan2(dy,dx)*180/Math.PI+90; if(hue<0) hue+=360;
-            const t=dist/outerR;
-            const lum=t<0.35 ? 95-(95-lightness)*(t/0.35) : lightness-(lightness-Math.max(5,lightness-28))*((t-0.35)/0.65);
-            const [r,g,b]=hslToRgb(hue/360,sat,lum/100);
-            const idx=(y*W+x)*4; data[idx]=r;data[idx+1]=g;data[idx+2]=b;data[idx+3]=255;
+        const W = canvas.width, H = canvas.height;
+        const cx = W / 2, cy = H / 2;
+        const outerR = cx - 4;
+        const sat = saturation / 100;
+        const imgData = ctx.createImageData(W, H);
+        const data = imgData.data;
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                const dx = x - cx, dy = y - cy;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                // Disque plein — plus de trou central
+                if (dist > outerR) continue;
+                let hue = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+                if (hue < 0) hue += 360;
+                // t = 0 au centre (blanc), t = 1 au bord extérieur (sombre)
+                const t = dist / outerR;
+                const lum = t < 0.35
+                    ? 95 - (95 - lightness) * (t / 0.35)
+                    : lightness - (lightness - Math.max(5, lightness - 28)) * ((t - 0.35) / 0.65);
+                const [r, g, b] = hslToRgb(hue / 360, sat, lum / 100);
+                const idx = (y * W + x) * 4;
+                data[idx] = r; data[idx+1] = g; data[idx+2] = b; data[idx+3] = 255;
+            }
         }
-        ctx.putImageData(imgData,0,0);
-        ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.6)';ctx.fill();
-        wheels[canvasId]={canvas,saturation,lightness};
+        ctx.putImageData(imgData, 0, 0);
+        // Plus de trou noir — on dessine juste un petit point blanc au centre
+        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
+        wheels[canvasId] = { canvas, saturation, lightness };
     }
 
-    function hslToRgb(h,s,l){
-        if(s===0){const v=Math.round(l*255);return[v,v,v];}
-        const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;
-        return[hueC(p,q,h+1/3),hueC(p,q,h),hueC(p,q,h-1/3)];
+    function hslToRgb(h, s, l) {
+        if (s === 0) { const v = Math.round(l*255); return [v,v,v]; }
+        const q = l < 0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
+        return [hueC(p,q,h+1/3), hueC(p,q,h), hueC(p,q,h-1/3)];
     }
-    function hueC(p,q,t){
-        if(t<0)t+=1;if(t>1)t-=1;
-        if(t<1/6)return Math.round((p+(q-p)*6*t)*255);
-        if(t<1/2)return Math.round(q*255);
-        if(t<2/3)return Math.round((p+(q-p)*(2/3-t)*6)*255);
+    function hueC(p, q, t) {
+        if (t<0) t+=1; if (t>1) t-=1;
+        if (t<1/6) return Math.round((p+(q-p)*6*t)*255);
+        if (t<1/2) return Math.round(q*255);
+        if (t<2/3) return Math.round((p+(q-p)*(2/3-t)*6)*255);
         return Math.round(p*255);
     }
 
-    function pickPixel(id,x,y){const c=(wheels[id]||{}).canvas||document.getElementById(id);if(!c)return null;const d=c.getContext('2d').getImageData(Math.round(x),Math.round(y),1,1).data;return[d[0],d[1],d[2],d[3]];}
-
-    function getHueAt(id,x,y){const c=(wheels[id]||{}).canvas||document.getElementById(id);if(!c)return -1;const cx=c.width/2,cy=c.height/2,dx=x-cx,dy=y-cy,dist=Math.sqrt(dx*dx+dy*dy);if(dist>cx-4)return -1;let a=Math.atan2(dy,dx)*180/Math.PI+90;if(a<0)a+=360;return a;}
-
-    function getColorAt(id,x,y){
-        const c=(wheels[id]||{}).canvas||document.getElementById(id);if(!c)return null;
-        const e=wheels[id],lt=e?e.lightness:50;
-        const cx=c.width/2,cy=c.height/2,dx=x-cx,dy=y-cy,dist=Math.sqrt(dx*dx+dy*dy),outerR=cx-4;
-        if(dist>outerR)return null;
-        let hue=Math.atan2(dy,dx)*180/Math.PI+90;if(hue<0)hue+=360;
-        const t=dist/outerR;
-        const lum=t<0.35?95-(95-lt)*(t/0.35):lt-(lt-Math.max(5,lt-28))*((t-0.35)/0.65);
-        return{hue:hue,lum:Math.round(lum)};
+    function pickPixel(canvasId, x, y) {
+        const c = (wheels[canvasId]||{}).canvas || document.getElementById(canvasId);
+        if (!c) return null;
+        const d = c.getContext('2d').getImageData(Math.round(x),Math.round(y),1,1).data;
+        return [d[0],d[1],d[2],d[3]];
     }
 
-    // ══ LOUPE ROUE (desktop 130px×6 / mobile 44px×4) ═════════════════════════
-    function drawWheelZoom(srcId,zoomId,cx_c,cy_c){
-        const src=document.getElementById(srcId),zoom=document.getElementById(zoomId);
-        if(!src||!zoom)return;
-        const e=wheels[srcId];if(!e)return;
-        const {saturation,lightness}=e;
-        const size=isMobile()?44:130, factor=isMobile()?4:6, half=size/2, srcPx=size/factor;
-        zoom.width=size;zoom.height=size;
-        zoom.style.display='block';zoom.style.width=size+'px';zoom.style.height=size+'px';
-        // Desktop : centré sur le curseur / Mobile : au-dessus du doigt
-        zoom.style.left=(cx_c-half)+'px';
-        zoom.style.top=(isMobile()?(cy_c-size-8):(cy_c-half))+'px';
-        const zc=zoom.getContext('2d');
-        const img=zc.createImageData(size,size),data=img.data;
-        const W=src.width,wcx=W/2,wcy=src.height/2,outerR=wcx-4;
-        for(let py=0;py<size;py++) for(let px=0;px<size;px++){
-            const ldx=px-half,ldy=py-half;
-            if(Math.sqrt(ldx*ldx+ldy*ldy)>half)continue;
-            const wx=cx_c+ldx*(srcPx/size),wy=cy_c+ldy*(srcPx/size);
-            const dx=wx-wcx,dy=wy-wcy,dist=Math.sqrt(dx*dx+dy*dy);
-            let r,g,b;
-            if(dist>outerR){r=g=b=17;}
-            else{
-                let hue=Math.atan2(dy,dx)*180/Math.PI+90;if(hue<0)hue+=360;
-                const t=dist/outerR;
-                const lum=t<0.35?95-(95-lightness)*(t/0.35):lightness-(lightness-Math.max(5,lightness-28))*((t-0.35)/0.65);
-                [r,g,b]=hslToRgb(hue/360,saturation/100,lum/100);
+    function getHueAt(canvasId, x, y) {
+        const c = (wheels[canvasId]||{}).canvas || document.getElementById(canvasId);
+        if (!c) return -1;
+        const cx = c.width/2, cy = c.height/2;
+        const dx = x-cx, dy = y-cy, dist = Math.sqrt(dx*dx+dy*dy);
+        const outerR = cx-4;
+        // Disque plein — sélection autorisée partout dans le disque
+        if (dist > outerR) return -1;
+        let a = Math.atan2(dy,dx)*180/Math.PI+90;
+        if (a<0) a+=360;
+        return a;
+    }
+
+    // Retourne { hue, lum } exacts du pixel — même formule que drawWheel
+    function getColorAt(canvasId, x, y) {
+        const c = (wheels[canvasId]||{}).canvas || document.getElementById(canvasId);
+        if (!c) return null;
+        const entry = wheels[canvasId];
+        const lightness = entry ? entry.lightness : 50;
+        const cx = c.width/2, cy = c.height/2;
+        const dx = x-cx, dy = y-cy, dist = Math.sqrt(dx*dx+dy*dy);
+        const outerR = cx-4;
+        if (dist > outerR) return null;
+        let hue = Math.atan2(dy,dx)*180/Math.PI+90;
+        if (hue < 0) hue += 360;
+        const t = dist / outerR;
+        const lum = t < 0.35
+            ? 95 - (95 - lightness) * (t / 0.35)
+            : lightness - (lightness - Math.max(5, lightness - 28)) * ((t - 0.35) / 0.65);
+        return { hue: hue, lum: Math.round(lum) };
+    }
+
+    // ══ LOUPE ROUE ════════════════════════════════════════════════════════════
+    // Principe : on recalcule les couleurs HSL pixel par pixel dans la loupe,
+    // sans le trou noir, en utilisant les mêmes paramètres sat/lightness
+    // que la roue. Résultat : couleurs fidèles même sur la zone centrale.
+    const WZ = 130;   // diamètre loupe (px)
+    const WZF = 4;    // grossissement ×4
+
+    function drawWheelZoom(srcId, zoomId, cx_cursor, cy_cursor) {
+        const src  = document.getElementById(srcId);
+        const zoom = document.getElementById(zoomId);
+        if (!src || !zoom) return;
+
+        const entry = wheels[srcId];
+        if (!entry) return;
+        const { saturation, lightness } = entry;
+
+        const half  = WZ / 2;
+        zoom.width  = WZ;
+        zoom.height = WZ;
+        zoom.style.display = 'block';
+
+        // Position : loupe centrée sur le curseur, au-dessus
+        zoom.style.left = (cx_cursor - half) + 'px';
+        zoom.style.top  = (cy_cursor - WZ - 16) + 'px';
+
+        const zc = zoom.getContext('2d');
+        const imgData = zc.createImageData(WZ, WZ);
+        const data = imgData.data;
+
+        // Paramètres de la roue source
+        const W = src.width, H = src.height;
+        const wcx = W / 2, wcy = H / 2;
+        const outerR = wcx - 4;
+        // On ignore innerR pour que la loupe montre les vraies couleurs
+        // même dans la zone du trou noir
+        const sat = saturation / 100;
+
+        // Pour chaque pixel de la loupe, calculer sa position sur la roue
+        const srcPx = WZ / WZF;  // nb de pixels source couverts
+        const halfSrc = srcPx / 2;
+
+        for (let py = 0; py < WZ; py++) {
+            for (let px = 0; px < WZ; px++) {
+                // Distance au centre de la loupe → dans le cercle ?
+                const ldx = px - half, ldy = py - half;
+                const ldist = Math.sqrt(ldx*ldx + ldy*ldy);
+                if (ldist > half) continue; // hors du cercle loupe
+
+                // Coordonnée correspondante sur la roue source
+                const wx = cx_cursor + (px - half) * (srcPx / WZ);
+                const wy = cy_cursor + (py - half) * (srcPx / WZ);
+
+                // Vecteur depuis le centre de la roue
+                const dx = wx - wcx, dy = wy - wcy;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                let r, g, b;
+
+                if (dist > outerR) {
+                    // Hors du disque : fond sombre
+                    r = g = b = 17;
+                } else {
+                    // Même formule exacte que drawWheel (disque plein, t = 0 centre → 1 bord)
+                    let hue = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+                    if (hue < 0) hue += 360;
+                    const t = dist / outerR;
+                    const lum = t < 0.35
+                        ? 95 - (95 - lightness) * (t / 0.35)
+                        : lightness - (lightness - Math.max(5, lightness - 28)) * ((t - 0.35) / 0.65);
+                    [r, g, b] = hslToRgb(hue / 360, sat, lum / 100);
+                }
+
+                const idx = (py * WZ + px) * 4;
+                data[idx] = r; data[idx+1] = g; data[idx+2] = b; data[idx+3] = 255;
             }
-            const idx=(py*size+px)*4;data[idx]=r;data[idx+1]=g;data[idx+2]=b;data[idx+3]=255;
         }
-        zc.putImageData(img,0,0);
-        zc.beginPath();zc.arc(half,half,half-1,0,Math.PI*2);
-        zc.strokeStyle='rgba(255,255,255,0.95)';zc.lineWidth=isMobile()?1.5:3;zc.stroke();
-        zc.strokeStyle='rgba(0,0,0,0.25)';zc.lineWidth=1;zc.stroke();
-        const arm=Math.max(4,Math.round(size*0.11));
-        zc.strokeStyle='rgba(255,255,255,0.9)';zc.lineWidth=isMobile()?1:1.5;
-        zc.shadowColor='rgba(0,0,0,0.9)';zc.shadowBlur=3;
-        zc.beginPath();zc.moveTo(half-arm,half);zc.lineTo(half+arm,half);zc.moveTo(half,half-arm);zc.lineTo(half,half+arm);
-        zc.stroke();zc.shadowBlur=0;
+
+        zc.putImageData(imgData, 0, 0);
+
+        // Bordure blanche
+        zc.beginPath();
+        zc.arc(half, half, half - 1, 0, Math.PI*2);
+        zc.strokeStyle = 'rgba(255,255,255,0.95)';
+        zc.lineWidth   = 3;
+        zc.stroke();
+        zc.strokeStyle = 'rgba(0,0,0,0.3)';
+        zc.lineWidth   = 1;
+        zc.stroke();
+
+        // Croix de visée centrale
+        const arm = 14;
+        zc.strokeStyle = 'rgba(255,255,255,0.9)';
+        zc.lineWidth   = 1.5;
+        zc.shadowColor = 'rgba(0,0,0,0.9)';
+        zc.shadowBlur  = 3;
+        zc.beginPath();
+        zc.moveTo(half-arm, half); zc.lineTo(half+arm, half);
+        zc.moveTo(half, half-arm); zc.lineTo(half, half+arm);
+        zc.stroke();
+        zc.shadowBlur = 0;
     }
 
-    function hideWheelZoom(id){const z=document.getElementById(id);if(z)z.style.display='none';}
+    function hideWheelZoom(zoomId) {
+        const z = document.getElementById(zoomId);
+        if (z) z.style.display = 'none';
+    }
 
     // ══ PIPETTE ═══════════════════════════════════════════════════════════════
-    let _pCtx=null,_pCanvas=null,_zCanvas=null;
+    let _pCtx = null, _pCanvas = null;
+    let _zCtx = null, _zCanvas = null;
+    const PZ = 87, PZF = 4;
 
-    function loadPipetteFromDataUrl(dataUrl,dotNetRef){
-        const img=new Image();
-        img.onload=()=>tryDraw(img,dataUrl,dotNetRef,15);
-        img.onerror=()=>console.error('ChromaMix: image pipette invalide');
-        img.src=dataUrl;
+    function loadPipetteFromDataUrl(dataUrl, dotNetRef) {
+        const img = new Image();
+        img.onload = () => {
+            // Notifier Blazor en premier pour qu'il rende le canvas dans le DOM
+            dotNetRef.invokeMethodAsync('OnPipetteImageReady', dataUrl)
+                .then(() => drawOnCanvas(img, 20));
+        };
+        img.onerror = () => console.error('ChromaMix: échec chargement image pipette');
+        img.src = dataUrl;
     }
 
-    function tryDraw(img,dataUrl,dotNetRef,n){
-        _pCanvas=document.getElementById('pipetteCanvas');
-        _zCanvas=document.getElementById('zoomCanvas');
-        if(!_pCanvas&&n>0){setTimeout(()=>tryDraw(img,dataUrl,dotNetRef,n-1),150);return;}
-        if(!_pCanvas){console.warn('pipetteCanvas introuvable');return;}
-        const wrap=_pCanvas.parentElement,maxW=wrap?(wrap.offsetWidth||340):340;
-        const scale=Math.min(1,maxW/img.naturalWidth);
-        _pCanvas.width=Math.round(img.naturalWidth*scale);
-        _pCanvas.height=Math.round(img.naturalHeight*scale);
-        _pCtx=_pCanvas.getContext('2d');
-        _pCtx.drawImage(img,0,0,_pCanvas.width,_pCanvas.height);
-        dotNetRef.invokeMethodAsync('OnPipetteImageReady',dataUrl);
-    }
+let _dotNetRef = null;
 
-    // Desktop : loupe suit la souris (sans retourner la couleur)
-    function pipettePreview(cssX,cssY){
-        if(!_pCtx||!_pCanvas)return;
-        _zCanvas=_zCanvas||document.getElementById('zoomCanvas');
-        if(!_zCanvas)return;
-        // Ratio CSS → canvas (car le canvas est affiché en width:100%)
-        const rect=_pCanvas.getBoundingClientRect();
-        const scaleX=_pCanvas.width/rect.width;
-        const scaleY=_pCanvas.height/rect.height;
-        const cx=cssX*scaleX, cy=cssY*scaleY; // coords canvas réelles
-        const size=130,half=size/2;
-        // Positionner en coordonnées CSS (affichage)
-        _zCanvas.style.left=(cssX-half)+'px';
-        _zCanvas.style.top=(cssY-half)+'px';
-        _drawPipetteZoom(_zCanvas,cx,cy,size,6);
-    }
-
-    // Mobile : loupe au-dessus du doigt + retourne la couleur
-    function pipetteTouchPreview(cx,cy,clientX,clientY){
-        if(!_pCtx)return null;
-        _zCanvas=_zCanvas||document.getElementById('zoomCanvas');
-        if(_zCanvas&&_pCanvas){
-            const wr=_pCanvas.parentElement;
-            if(wr){
-                const r=wr.getBoundingClientRect(),pz=44;
-                _zCanvas.style.left=(clientX-r.left-pz/2)+'px';
-                _zCanvas.style.top=(clientY-r.top-pz-8)+'px';
-                _drawPipetteZoom(_zCanvas,cx,cy,pz,4);
-            }
+    function drawOnCanvas(img, attempts) {
+        _pCanvas = document.getElementById('pipetteCanvas');
+        _zCanvas = document.getElementById('zoomCanvas');
+        if (!_pCanvas && attempts > 0) {
+            setTimeout(() => drawOnCanvas(img, attempts - 1), 80);
+            return;
         }
-        const px=_pCtx.getImageData(Math.round(cx),Math.round(cy),1,1).data;
-        return[px[0],px[1],px[2]];
+        if (!_pCanvas) { console.warn('ChromaMix: pipetteCanvas introuvable'); return; }
+
+        const wrap  = _pCanvas.parentElement;
+        const maxW  = wrap ? (wrap.offsetWidth || 340) : 340;
+        const scale = Math.min(1, maxW / img.naturalWidth);
+        const W     = Math.round(img.naturalWidth  * scale);
+        const H     = Math.round(img.naturalHeight * scale);
+        _pCanvas.width  = W;
+        _pCanvas.height = H;
+        _pCtx = _pCanvas.getContext('2d');
+        _pCtx.drawImage(img, 0, 0, W, H);
+
+        if (_zCanvas) {
+            _zCanvas.width  = PZ;
+            _zCanvas.height = PZ;
+            _zCtx = _zCanvas.getContext('2d');
+        }
+
+        // Events natifs JS — zero latence Blazor
+        _pCanvas.removeEventListener('mousemove',  _onPipetteMove);
+        _pCanvas.removeEventListener('mouseleave', _onPipetteLeave);
+        _pCanvas.removeEventListener('click',      _onPipetteClick);
+        _pCanvas.removeEventListener('touchmove',  _onPipetteTouch);
+        _pCanvas.removeEventListener('touchend',   _onPipetteLeave);
+        _pCanvas.addEventListener('mousemove',  _onPipetteMove);
+        _pCanvas.addEventListener('mouseleave', _onPipetteLeave);
+        _pCanvas.addEventListener('click',      _onPipetteClick);
+        _pCanvas.addEventListener('touchmove',  _onPipetteTouch, { passive: false });
+        _pCanvas.addEventListener('touchend',   _onPipetteLeave);
     }
 
-    // Retourne [R,G,B] du pixel — utilisé par le clic desktop (cssX/Y → canvas)
-    function pipettePickColor(cssX,cssY){
-        if(!_pCtx||!_pCanvas)return null;
-        const rect=_pCanvas.getBoundingClientRect();
-        const cx=cssX*(_pCanvas.width/rect.width);
-        const cy=cssY*(_pCanvas.height/rect.height);
-        const px=_pCtx.getImageData(Math.round(cx),Math.round(cy),1,1).data;
-        return[px[0],px[1],px[2]];
+    function _getCssAndCanvasCoords(clientX, clientY) {
+        const canvasRect  = _pCanvas.getBoundingClientRect();
+        const wrapRect    = _pCanvas.parentElement.getBoundingClientRect();
+        // Position du curseur dans le referentiel du wrapper (parent du zoomCanvas)
+        const wrapX  = clientX - wrapRect.left;
+        const wrapY  = clientY - wrapRect.top;
+        // Position dans le canvas source (pixels reels pour lire/zoomer)
+        const scaleX = _pCanvas.width  / canvasRect.width;
+        const scaleY = _pCanvas.height / canvasRect.height;
+        const cx     = (clientX - canvasRect.left) * scaleX;
+        const cy     = (clientY - canvasRect.top)  * scaleY;
+        return { cssX: wrapX, cssY: wrapY, cx, cy };
     }
 
-    function _drawPipetteZoom(zc,x,y,size,factor){
-        const half=size/2,src=size/factor;
-        zc.width=size;zc.height=size;
-        zc.style.display='block';zc.style.width=size+'px';zc.style.height=size+'px';
-        const ctx=zc.getContext('2d');
-        ctx.clearRect(0,0,size,size);
-        ctx.save();ctx.beginPath();ctx.arc(half,half,half-2,0,Math.PI*2);ctx.clip();
-        ctx.imageSmoothingEnabled=false;
-        ctx.drawImage(_pCanvas,x-src/2,y-src/2,src,src,0,0,size,size);
-        ctx.restore();
-        ctx.beginPath();ctx.arc(half,half,half-2,0,Math.PI*2);
-        ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=size<60?1.5:2.5;ctx.stroke();
-        const arm=Math.max(4,Math.round(size*0.08));
-        ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=size<60?1:1.5;
-        ctx.shadowColor='rgba(0,0,0,0.8)';ctx.shadowBlur=2;
-        ctx.beginPath();ctx.moveTo(half-arm,half);ctx.lineTo(half+arm,half);ctx.moveTo(half,half-arm);ctx.lineTo(half,half+arm);
-        ctx.stroke();ctx.shadowBlur=0;
+    function _drawZoom(cssX, cssY, cx, cy) {
+        if (!_zCtx || !_zCanvas) return;
+        const half = PZ / 2;
+        const src  = PZ / PZF;
+
+        _zCanvas.style.display = 'block';
+        _zCanvas.style.left    = (cssX - half) + 'px';
+        _zCanvas.style.top     = (cssY - half) + 'px';
+
+        _zCtx.clearRect(0, 0, PZ, PZ);
+        _zCtx.save();
+        _zCtx.beginPath();
+        _zCtx.arc(half, half, half - 2, 0, Math.PI * 2);
+        _zCtx.clip();
+        _zCtx.imageSmoothingEnabled = false;
+        _zCtx.drawImage(_pCanvas, cx - src / 2, cy - src / 2, src, src, 0, 0, PZ, PZ);
+        _zCtx.restore();
+
+        _zCtx.beginPath();
+        _zCtx.arc(half, half, half - 2, 0, Math.PI * 2);
+        _zCtx.strokeStyle = 'rgba(255,255,255,0.9)'; _zCtx.lineWidth = 2.5; _zCtx.stroke();
+        _zCtx.strokeStyle = 'rgba(0,0,0,0.3)';       _zCtx.lineWidth = 1;   _zCtx.stroke();
+
+        const arm = 10;
+        _zCtx.strokeStyle = 'rgba(255,255,255,0.9)'; _zCtx.lineWidth = 1.5;
+        _zCtx.shadowColor = 'rgba(0,0,0,0.8)'; _zCtx.shadowBlur = 2;
+        _zCtx.beginPath();
+        _zCtx.moveTo(half - arm, half); _zCtx.lineTo(half + arm, half);
+        _zCtx.moveTo(half, half - arm); _zCtx.lineTo(half, half + arm);
+        _zCtx.stroke();
+        _zCtx.shadowBlur = 0;
     }
 
-    function hidePipetteZoom(){
-        _zCanvas=_zCanvas||document.getElementById('zoomCanvas');
-        if(_zCanvas)_zCanvas.style.display='none';
+    function _onPipetteMove(e) {
+        const { cssX, cssY, cx, cy } = _getCssAndCanvasCoords(e.clientX, e.clientY);
+        _drawZoom(cssX, cssY, cx, cy);
+        if (_dotNetRef) {
+            const px = _pCtx.getImageData(Math.round(cx), Math.round(cy), 1, 1).data;
+            _dotNetRef.invokeMethodAsync('OnPipetteHover', px[0], px[1], px[2]);
+        }
     }
 
-    function getCanvasOffset(id,clientX,clientY){
-        const c=document.getElementById(id);if(!c)return null;
-        const r=c.getBoundingClientRect();
-        return[(clientX-r.left)*(c.width/r.width),(clientY-r.top)*(c.height/r.height)];
+    function _onPipetteTouch(e) {
+        e.preventDefault();
+        if (!e.touches.length) return;
+        const t = e.touches[0];
+        const { cssX, cssY, cx, cy } = _getCssAndCanvasCoords(t.clientX, t.clientY);
+        _drawZoom(cssX, cssY, cx, cy);
+        if (_dotNetRef) {
+            const px = _pCtx.getImageData(Math.round(cx), Math.round(cy), 1, 1).data;
+            _dotNetRef.invokeMethodAsync('OnPipetteHover', px[0], px[1], px[2]);
+        }
     }
 
-    function scrollToResults(){
-        if(window.innerWidth>900)return;
-        const p=document.getElementById('results-panel');
-        if(p)p.scrollIntoView({behavior:'smooth',block:'start'});
+    function _onPipetteLeave() {
+        hidePipetteZoom();
     }
 
-    function updateHslThumbs(){
-        document.querySelectorAll('.hsl-track').forEach(t=>{
-            const i=t.querySelector('input[type=range]');if(!i)return;
-            t.style.setProperty('--thumb-pct',((+i.value-+i.min)/(+i.max-+i.min))*100+'%');
+    function _onPipetteClick(e) {
+        // Sur mobile le 'click' se declenche apres touchend — on l'ignore,
+        // la confirmation passe uniquement par le bouton "Utiliser"
+        if (e.pointerType === 'touch') return;
+        const { cx, cy } = _getCssAndCanvasCoords(e.clientX, e.clientY);
+        if (_dotNetRef) {
+            const px = _pCtx.getImageData(Math.round(cx), Math.round(cy), 1, 1).data;
+            _dotNetRef.invokeMethodAsync('OnPipetteClick', px[0], px[1], px[2]);
+        }
+    }
+
+    function pipetteSetDotNetRef(ref) {
+        _dotNetRef = ref;
+    }
+
+    function pipetteClear() {
+        if (_pCanvas) {
+            _pCanvas.removeEventListener('mousemove',  _onPipetteMove);
+            _pCanvas.removeEventListener('mouseleave', _onPipetteLeave);
+            _pCanvas.removeEventListener('click',      _onPipetteClick);
+            _pCanvas.removeEventListener('touchmove',  _onPipetteTouch);
+            _pCanvas.removeEventListener('touchend',   _onPipetteLeave);
+        }
+        hidePipetteZoom();
+        _pCtx = null; _pCanvas = null;
+        _zCtx = null; _zCanvas = null;
+    }
+
+    function pipettePreview(cssX, cssY) {
+        if (!_pCtx) return null;
+        const rect   = _pCanvas.getBoundingClientRect();
+        const cx = cssX * (_pCanvas.width / rect.width);
+        const cy = cssY * (_pCanvas.height / rect.height);
+        _drawZoom(cssX, cssY, cx, cy);
+        const px = _pCtx.getImageData(Math.round(cx), Math.round(cy), 1, 1).data;
+        return [px[0], px[1], px[2]];
+    }
+
+    function hidePipetteZoom() {
+        if (_zCanvas) _zCanvas.style.display = 'none';
+    }
+
+
+    function getCanvasOffset(canvasId, clientX, clientY) {
+        const c = document.getElementById(canvasId);
+        if (!c) return null;
+        const r = c.getBoundingClientRect();
+        return [(clientX-r.left)*(c.width/r.width), (clientY-r.top)*(c.height/r.height)];
+    }
+
+    // ══ UTILITAIRES ══════════════════════════════════════════════════════════
+    function scrollToResults() {
+        if (window.innerWidth > 900) return;
+        const p = document.getElementById('results-panel');
+        if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function updateHslThumbs() {
+        document.querySelectorAll('.hsl-track').forEach(track => {
+            const input = track.querySelector('input[type=range]');
+            if (!input) return;
+            const pct = ((+input.value - +input.min) / (+input.max - +input.min)) * 100;
+            track.style.setProperty('--thumb-pct', pct + '%');
         });
     }
-    document.addEventListener('input',e=>{if(e.target&&e.target.classList.contains('hsl-input'))updateHslThumbs();});
+    document.addEventListener('input', e => {
+        if (e.target && e.target.classList.contains('hsl-input')) updateHslThumbs();
+    });
 
-    return{
-        drawWheel,pickPixel,getHueAt,getColorAt,
-        drawWheelZoom,hideWheelZoom,
-        loadPipetteFromDataUrl,pipettePreview,pipettePickColor,pipetteTouchPreview,hidePipetteZoom,
-        getCanvasOffset,scrollToResults,updateHslThumbs
+    return {
+        drawWheel, pickPixel, getHueAt, getColorAt,
+        drawWheelZoom, hideWheelZoom,
+        loadPipetteFromDataUrl, pipettePreview, hidePipetteZoom, pipetteSetDotNetRef, pipetteClear, getCanvasOffset,
+        scrollToResults, updateHslThumbs
     };
 })();

@@ -33,7 +33,7 @@
                 </button>
             </div>
         </div>
-        <p class="welcome-dedication">Réalisé par Mickael LEHAY pour Laeticia 🎨</p>
+        <p class="welcome-dedication">Pour Laetitia 🎨</p>
     </div>
 }
 else
@@ -47,7 +47,7 @@ else
         <div class="mode-badge @(paintMode == PaintMode.Watercolor ? "wc" : "op")">
             @(paintMode == PaintMode.Watercolor ? "💧 Aquarelle" : "🎨 Opaque")
         </div>
-        <button class="change-mode-btn" @onclick="ResetMode">Changer de mode</button>
+        <button class="change-mode-btn" @onclick="async () => await ResetMode()">Changer de mode</button>
     </header>
 
     <main class="main-layout">
@@ -56,9 +56,10 @@ else
         <section class="panel wheel-panel">
             <h2 class="panel-title">Sélection de couleur</h2>
 
-            <!-- Onglets Roue / Sliders -->
+            <!-- Onglets Roue / Grille / Sliders -->
             <div class="picker-tabs">
-                <button class="picker-tab @(pickerTab == 0 ? "active" : "")" @onclick='() => SwitchTab(0)'>🎡 Roue</button>
+                <button class="picker-tab wheel-tab-btn @(pickerTab == 0 ? "active" : "")" @onclick='() => SwitchTab(0)'>🎡 Roue</button>
+                <button class="picker-tab grid-tab-btn @(pickerTab == 0 ? "active" : "")" @onclick='() => SwitchTab(0)'>🎨 Couleurs</button>
                 <button class="picker-tab @(pickerTab == 1 ? "active" : "")" @onclick='() => SwitchTab(1)'>🎚 Sliders</button>
                 <button class="picker-tab @(pickerTab == 2 ? "active" : "")" @onclick='() => SwitchTab(2)'>🔬 Pipette</button>
             </div>
@@ -71,12 +72,7 @@ else
                             @onmousemove="OnWheelMouseMove"
                             @onclick="OnWheelClick"
                             @onmouseleave="OnWheelMouseLeave"
-                            @ontouchstart:preventDefault="true"
-                            @ontouchstart="OnWheelTouchStart"
-                            @ontouchmove:preventDefault="true"
-                            @ontouchmove="OnWheelTouchMove"
-                            @ontouchend="OnWheelTouchEnd"
-                            style="cursor:crosshair; border-radius:50%; touch-action:none;" />
+                            style="cursor:crosshair; border-radius:50%;" />
                     <!-- Canvas loupe — toujours présent, déplacé via JS -->
                     <canvas id="wheelZoomCanvas" class="wheel-zoom-canvas" style="display:none;"></canvas>
                 </div>
@@ -93,6 +89,23 @@ else
                                @oninput="OnLightnessChange" class="styled-slider lightness-slider" />
                         <span class="slider-val">@lightness%</span>
                     </div>
+
+                <!-- Grille de couleurs (mobile uniquement) -->
+                <div class="color-grid-mobile">
+                    @foreach (var row in ColorGridRows)
+                    {
+                        <div class="cgrid-row">
+                            @foreach (var tile in row)
+                            {
+                                <button class="cgrid-tile @(selectedColor != null && selectedColor.Hex.ToUpper() == tile.Hex.ToUpper() ? "cgrid-selected" : "")"
+                                        style="background:@tile.Hex;"
+                                        title="@tile.Hex"
+                                        @onclick="() => SelectGridColor(tile)">
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
                 </div>
             }
 
@@ -152,17 +165,9 @@ else
                     @if (pipetteImageData != null)
                     {
                         <div class="pipette-canvas-wrap" id="pipette-wrap">
-                            <canvas id="pipetteCanvas"
-                                    @onmousemove="OnPipetteMouseMove"
-                                    @onclick="OnPipetteClick"
-                                    @ontouchmove:preventDefault="true"
-                                    @ontouchmove="OnPipetteTouchMove"
-                                    @ontouchend="OnPipetteTouchEnd"
-                                    style="cursor:none; touch-action:none;" />
+                            <canvas id="pipetteCanvas" style="cursor:none; touch-action:none; display:block; width:100%;" />
                             <!-- Loupe -->
-                            <canvas id="zoomCanvas" class="zoom-lens" style="left:@(zoomX)px; top:@(zoomY)px;" />
-                            <!-- Croix centrale de la loupe -->
-                            <div class="zoom-crosshair" style="left:@(zoomX)px; top:@(zoomY)px;"></div>
+                            <canvas id="zoomCanvas" class="zoom-lens" style="display:none;" />
                         </div>
 
                         @if (pipetteColor != null)
@@ -214,7 +219,8 @@ else
             else
             {
                 <div class="placeholder-card">
-                    <span>Cliquez sur la roue pour sélectionner une couleur</span>
+                    <span class="placeholder-desktop">Cliquez sur la roue pour sélectionner une couleur</span>
+                    <span class="placeholder-mobile">Modifiez la luminosité et la saturation puis appuyez sur une tuile</span>
                 </div>
             }
         </section>
@@ -428,8 +434,9 @@ else
         await RedrawWheel();
     }
 
-    private void ResetMode()
+    private async Task ResetMode()
     {
+        await ClearPipette();
         paintMode     = null;
         selectedColor = null;
         mixResult     = null;
@@ -463,8 +470,7 @@ else
     // ─── Pipette ─────────────────────────────────────────────────────────────
     private string?    pipetteImageData = null;
     private ColorInfo? pipetteColor     = null;
-    private double     zoomX            = -200;
-    private double     zoomY            = -200;
+    private DotNetObjectReference<Index>? _pipetteDotNetRef;
 
     // ─── Roue : dessin ───────────────────────────────────────────────────────
     private async Task RedrawWheel()
@@ -545,61 +551,6 @@ else
         StateHasChanged();
     }
 
-    // ─── Touch roue (mobile) ─────────────────────────────────────────────────
-    // Sur mobile : presser et glisser pour parcourir, relâcher pour sélectionner
-
-    private async Task OnWheelTouchStart(TouchEventArgs e)
-    {
-        if (e.Touches.Length == 0) return;
-        var t   = e.Touches[0];
-        var pos = await JS.InvokeAsync<double[]>("chromaMix.getCanvasOffset", "colorWheel", t.ClientX, t.ClientY);
-        if (pos == null) return;
-        isHovering = true;
-        hoverX = pos[0]; hoverY = pos[1];
-        try
-        {
-            var c = await JS.InvokeAsync<WheelColor?>("chromaMix.getColorAt", "colorWheel", pos[0], pos[1]);
-            hoverColor = c != null ? ColorFromHSL(c.Hue, saturation, c.Lum) : null;
-            await JS.InvokeVoidAsync("chromaMix.drawWheelZoom", "colorWheel", "wheelZoomCanvas", pos[0], pos[1]);
-        }
-        catch { hoverColor = null; }
-        StateHasChanged();
-    }
-
-    private async Task OnWheelTouchMove(TouchEventArgs e)
-    {
-        if (e.Touches.Length == 0) return;
-        var t   = e.Touches[0];
-        var pos = await JS.InvokeAsync<double[]>("chromaMix.getCanvasOffset", "colorWheel", t.ClientX, t.ClientY);
-        if (pos == null) return;
-        hoverX = pos[0]; hoverY = pos[1];
-        try
-        {
-            var c = await JS.InvokeAsync<WheelColor?>("chromaMix.getColorAt", "colorWheel", pos[0], pos[1]);
-            hoverColor = c != null ? ColorFromHSL(c.Hue, saturation, c.Lum) : null;
-            await JS.InvokeVoidAsync("chromaMix.drawWheelZoom", "colorWheel", "wheelZoomCanvas", pos[0], pos[1]);
-        }
-        catch { hoverColor = null; }
-        StateHasChanged();
-    }
-
-    private async Task OnWheelTouchEnd(TouchEventArgs e)
-    {
-        // Sélectionner la couleur survolée au moment du relâchement
-        if (hoverColor != null)
-        {
-            selectedColor = hoverColor;
-            selectedHue   = hoverColor.H;
-            lightness     = hoverColor.L;
-            ComputeMix();
-        }
-        isHovering = false;
-        hoverColor = null;
-        await JS.InvokeVoidAsync("chromaMix.hideWheelZoom", "wheelZoomCanvas");
-        StateHasChanged();
-        await JS.InvokeVoidAsync("chromaMix.scrollToResults");
-    }
-
     private async Task OnWheelMouseLeave(MouseEventArgs e)
     {
         isHovering = false;
@@ -641,6 +592,8 @@ else
     // ─── Onglet picker ───────────────────────────────────────────────────────────
     private async Task SwitchTab(int tab)
     {
+        if (pickerTab == 2 && tab != 2)
+            await ClearPipette();
         pickerTab = tab;
         StateHasChanged();
         if (tab == 0)
@@ -648,6 +601,13 @@ else
             await Task.Delay(30);
             await RedrawWheel();
         }
+    }
+
+    private async Task ClearPipette()
+    {
+        pipetteImageData = null;
+        pipetteColor     = null;
+        try { await JS.InvokeVoidAsync("chromaMix.pipetteClear"); } catch { }
     }
 
     private void OnHueSliderChange(ChangeEventArgs e)
@@ -669,87 +629,50 @@ else
     }
 
     // ─── Pipette : chargement image ─────────────────────────────────────────────
-    private string? _pendingPipetteDataUrl = null;
-
     private async Task OnImageUpload(InputFileChangeEventArgs e)
     {
-        pipetteColor = null;
+        pipetteImageData = null;
+        pipetteColor     = null;
+        StateHasChanged();
+
         var file = e.File;
         if (file == null) return;
 
+        // Lire le fichier en base64 et l'envoyer au JS
         using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
         using var ms     = new System.IO.MemoryStream();
         await stream.CopyToAsync(ms);
         var base64   = Convert.ToBase64String(ms.ToArray());
-        var mimeType = string.IsNullOrEmpty(file.ContentType) ? "image/jpeg" : file.ContentType;
+        var mimeType = file.ContentType;
         var dataUrl  = $"data:{mimeType};base64,{base64}";
 
-        // 1. Stocker le dataUrl et afficher le canvas d'abord
-        pipetteImageData       = dataUrl;
-        _pendingPipetteDataUrl = dataUrl;
-        StateHasChanged(); // re-rendu : le canvas apparaît dans le DOM
-    }
-
-    // 2. Une fois le canvas dans le DOM, dessiner l'image
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (_pendingPipetteDataUrl != null)
-        {
-            var dataUrl = _pendingPipetteDataUrl;
-            _pendingPipetteDataUrl = null;
-            var dotNetRef = DotNetObjectReference.Create(this);
-            await Task.Delay(30); // s'assurer que le canvas est rendu
-            await JS.InvokeVoidAsync("chromaMix.loadPipetteFromDataUrl", dataUrl, dotNetRef);
-        }
+        _pipetteDotNetRef ??= DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("chromaMix.loadPipetteFromDataUrl", dataUrl, _pipetteDotNetRef);
+        await JS.InvokeVoidAsync("chromaMix.pipetteSetDotNetRef", _pipetteDotNetRef);
     }
 
     [JSInvokable]
     public async Task OnPipetteImageReady(string dataUrl)
     {
-        // Image déjà affichée, juste confirmer
+        pipetteImageData = dataUrl;
         StateHasChanged();
         await Task.CompletedTask;
     }
 
-    private async Task OnPipetteMouseMove(MouseEventArgs e)
+    // ─── Callbacks invoqués par JS natif (mousemove/touch sur le canvas) ──────
+    [JSInvokable]
+    public void OnPipetteHover(int r, int g, int b)
     {
-        // Desktop : la loupe suit la souris mais ne change PAS pipetteColor
-        // La couleur n'est choisie qu'au clic
-        zoomX = e.OffsetX - 80;
-        zoomY = e.OffsetY - 80;
-        await JS.InvokeVoidAsync("chromaMix.pipettePreview", e.OffsetX, e.OffsetY);
+        pipetteColor = new ColorInfo(r, g, b);
         StateHasChanged();
     }
 
-    private async Task OnPipetteClick(MouseEventArgs e)
+    [JSInvokable]
+    public async Task OnPipetteClick(int r, int g, int b)
     {
-        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePickColor", e.OffsetX, e.OffsetY);
-        if (rgb == null || rgb.Length < 3) return;
-        pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
+        pipetteColor = new ColorInfo(r, g, b);
         StateHasChanged();
-    }
-
-    private async Task OnPipetteTouchMove(TouchEventArgs e)
-    {
-        if (e.Touches.Length == 0) return;
-        var t   = e.Touches[0];
-        var pos = await JS.InvokeAsync<double[]>("chromaMix.getCanvasOffset", "pipetteCanvas", t.ClientX, t.ClientY);
-        if (pos == null) return;
-        // Mobile : loupe au-dessus du doigt (JS gère la position)
-        // On met zoomX/Y hors écran — la loupe est positionnée entièrement par JS
-        zoomX = -300; zoomY = -300;
-        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipetteTouchPreview", pos[0], pos[1], t.ClientX, t.ClientY);
-        if (rgb != null && rgb.Length == 3)
-            pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
-        StateHasChanged();
-    }
-
-    private async Task OnPipetteTouchEnd(TouchEventArgs e)
-    {
-        // Sélectionner la couleur au relâchement (comme la roue)
-        zoomX = -300; zoomY = -300;
-        await JS.InvokeVoidAsync("chromaMix.hidePipetteZoom");
-        StateHasChanged();
+        await JS.InvokeVoidAsync("chromaMix.scrollToResults");
     }
 
     private async Task ConfirmPipetteColor()
@@ -780,6 +703,31 @@ else
     {
         if (selectedColor == null || currentBrand == null) { mixResult = null; return; }
         mixResult = MixingEngine.Compute(selectedColor, currentBrand.Colors, paintMode!.Value, waterRatio);
+    }
+
+    // ─── Grille mobile ─────────────────────────────────────────────────────────
+    // Hüen : 12 colonnes étalées sur 360°, S fixé à 80%, L : 5 lignes de 25 à 85%
+    private static readonly int[] GridHues = { 0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330 };
+
+    // 5 lignes centrées autour de lightness, espacées de 15%
+    private IEnumerable<int> GridLits =>
+        new[] { -30, -15, 0, 15, 30 }
+            .Select(offset => Math.Clamp(lightness + offset, 5, 95));
+
+    private IEnumerable<IEnumerable<ColorInfo>> ColorGridRows =>
+        GridLits.Select(l =>
+            GridHues.Select(h => ColorFromHSL(h, saturation, l))
+        );
+
+    private async Task SelectGridColor(ColorInfo c)
+    {
+        selectedHue   = c.H;
+        saturation    = c.S;
+        lightness     = c.L;
+        selectedColor = c;
+        ComputeMix();
+        StateHasChanged();
+        await JS.InvokeVoidAsync("chromaMix.scrollToResults");
     }
 
     // ─── Utilitaires ─────────────────────────────────────────────────────────
