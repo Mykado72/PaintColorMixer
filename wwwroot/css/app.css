@@ -292,6 +292,37 @@ html, body {
     .panel { border-bottom: 1px solid var(--border); }
     .wheel-wrapper { width: 300px; height: 300px; }
     .wheel-wrapper canvas { width: 300px !important; height: 300px !important; }
+
+    /* ── Page d'accueil mobile : tout tient sans scroller ────────────────── */
+    .welcome-screen {
+        min-height: 100dvh;           /* dynamic viewport — exclut la barre du navigateur */
+        height: 100dvh;
+        justify-content: space-between;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    .welcome-inner {
+        flex: 1;
+        gap: 12px;
+        padding: 20px 20px 8px;
+        justify-content: center;
+    }
+    .welcome-logo .logo-icon { font-size: 26px; }
+    .welcome-logo .logo-text { font-size: 24px; }
+    .welcome-sub  { font-size: 10px; margin-top: -6px; }
+    .welcome-question { font-size: 15px; margin-top: 0; }
+    .mode-cards { gap: 10px; margin-top: 0; }
+    .mode-card  { padding: 16px 14px; gap: 6px; border-radius: 12px; }
+    .mode-icon  { font-size: 26px; }
+    .mode-title { font-size: 14px; }
+    .mode-desc  { font-size: 10px; }
+    .mode-brands { font-size: 9px; padding-top: 7px; }
+    .welcome-dedication {
+        position: static;           /* sort du flux absolu */
+        padding: 12px 0 16px;
+        font-size: 10px;
+        letter-spacing: 1px;
+    }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
@@ -449,9 +480,9 @@ html, body {
     text-align: center;
     font-family: 'Syne', sans-serif;
     font-size: 12px;
-    color: var(--muted);
-    letter-spacing: 3px;
-    opacity: 0.55;
+    color: #c8d8e8;
+    letter-spacing: 2px;
+    opacity: 0.85;
 }
 
 /* ── Comparatif côte à côte — règle unique ci-dessous ─────────────────── */
@@ -724,7 +755,6 @@ html, body {
     border-radius: 50%;
     pointer-events: none;
     z-index: 10;
-    transform: translate(-50%, -50%);
     box-shadow: 0 4px 24px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.3);
 }
 
@@ -734,7 +764,6 @@ html, body {
     height: 120px;
     pointer-events: none;
     z-index: 11;
-    transform: translate(-50%, -50%);
 }
 
 /* Résultat pipette */
@@ -795,8 +824,7 @@ html, body {
 
 /* Mobile : loupe plus grande */
 @media (max-width: 900px) {
-    .zoom-lens { width: 140px; height: 140px; }
-    .zoom-crosshair { width: 140px; height: 140px; }
+    .zoom-lens { width: 44px !important; height: 44px !important; border-radius: 50%; }
 }
 
 /* ── Palette chip — états interactifs ──────────────────────────────────────── */

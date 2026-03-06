@@ -713,17 +713,17 @@ else
 
     private async Task OnPipetteMouseMove(MouseEventArgs e)
     {
+        // Desktop : la loupe suit la souris mais ne change PAS pipetteColor
+        // La couleur n'est choisie qu'au clic
         zoomX = e.OffsetX - 80;
         zoomY = e.OffsetY - 80;
-        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePreview", e.OffsetX, e.OffsetY);
-        if (rgb != null && rgb.Length == 3)
-            pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
+        await JS.InvokeVoidAsync("chromaMix.pipettePreview", e.OffsetX, e.OffsetY);
         StateHasChanged();
     }
 
     private async Task OnPipetteClick(MouseEventArgs e)
     {
-        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePreview", e.OffsetX, e.OffsetY);
+        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePickColor", e.OffsetX, e.OffsetY);
         if (rgb == null || rgb.Length < 3) return;
         pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
         StateHasChanged();
@@ -735,15 +735,22 @@ else
         var t   = e.Touches[0];
         var pos = await JS.InvokeAsync<double[]>("chromaMix.getCanvasOffset", "pipetteCanvas", t.ClientX, t.ClientY);
         if (pos == null) return;
-        zoomX = pos[0] - 80;
-        zoomY = pos[1] - 80;
-        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipettePreview", pos[0], pos[1]);
+        // Mobile : loupe au-dessus du doigt (JS gère la position)
+        // On met zoomX/Y hors écran — la loupe est positionnée entièrement par JS
+        zoomX = -300; zoomY = -300;
+        var rgb = await JS.InvokeAsync<int[]>("chromaMix.pipetteTouchPreview", pos[0], pos[1], t.ClientX, t.ClientY);
         if (rgb != null && rgb.Length == 3)
             pipetteColor = new ColorInfo(rgb[0], rgb[1], rgb[2]);
         StateHasChanged();
     }
 
-    private void OnPipetteTouchEnd(TouchEventArgs e) { zoomX = -200; zoomY = -200; StateHasChanged(); }
+    private async Task OnPipetteTouchEnd(TouchEventArgs e)
+    {
+        // Sélectionner la couleur au relâchement (comme la roue)
+        zoomX = -300; zoomY = -300;
+        await JS.InvokeVoidAsync("chromaMix.hidePipetteZoom");
+        StateHasChanged();
+    }
 
     private async Task ConfirmPipetteColor()
     {
