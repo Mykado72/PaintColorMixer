@@ -33,7 +33,7 @@
                 </button>
             </div>
         </div>
-        <p class="welcome-dedication">Pour Laetitia 🎨</p>
+        <p class="welcome-dedication">Réalisé par Mickael LEHAY pour Laeticia 🎨</p>
     </div>
 }
 else
@@ -71,7 +71,12 @@ else
                             @onmousemove="OnWheelMouseMove"
                             @onclick="OnWheelClick"
                             @onmouseleave="OnWheelMouseLeave"
-                            style="cursor:crosshair; border-radius:50%;" />
+                            @ontouchstart:preventDefault="true"
+                            @ontouchstart="OnWheelTouchStart"
+                            @ontouchmove:preventDefault="true"
+                            @ontouchmove="OnWheelTouchMove"
+                            @ontouchend="OnWheelTouchEnd"
+                            style="cursor:crosshair; border-radius:50%; touch-action:none;" />
                     <!-- Canvas loupe — toujours présent, déplacé via JS -->
                     <canvas id="wheelZoomCanvas" class="wheel-zoom-canvas" style="display:none;"></canvas>
                 </div>
@@ -540,6 +545,61 @@ else
         StateHasChanged();
     }
 
+    // ─── Touch roue (mobile) ─────────────────────────────────────────────────
+    // Sur mobile : presser et glisser pour parcourir, relâcher pour sélectionner
+
+    private async Task OnWheelTouchStart(TouchEventArgs e)
+    {
+        if (e.Touches.Length == 0) return;
+        var t   = e.Touches[0];
+        var pos = await JS.InvokeAsync<double[]>("chromaMix.getCanvasOffset", "colorWheel", t.ClientX, t.ClientY);
+        if (pos == null) return;
+        isHovering = true;
+        hoverX = pos[0]; hoverY = pos[1];
+        try
+        {
+            var c = await JS.InvokeAsync<WheelColor?>("chromaMix.getColorAt", "colorWheel", pos[0], pos[1]);
+            hoverColor = c != null ? ColorFromHSL(c.Hue, saturation, c.Lum) : null;
+            await JS.InvokeVoidAsync("chromaMix.drawWheelZoom", "colorWheel", "wheelZoomCanvas", pos[0], pos[1]);
+        }
+        catch { hoverColor = null; }
+        StateHasChanged();
+    }
+
+    private async Task OnWheelTouchMove(TouchEventArgs e)
+    {
+        if (e.Touches.Length == 0) return;
+        var t   = e.Touches[0];
+        var pos = await JS.InvokeAsync<double[]>("chromaMix.getCanvasOffset", "colorWheel", t.ClientX, t.ClientY);
+        if (pos == null) return;
+        hoverX = pos[0]; hoverY = pos[1];
+        try
+        {
+            var c = await JS.InvokeAsync<WheelColor?>("chromaMix.getColorAt", "colorWheel", pos[0], pos[1]);
+            hoverColor = c != null ? ColorFromHSL(c.Hue, saturation, c.Lum) : null;
+            await JS.InvokeVoidAsync("chromaMix.drawWheelZoom", "colorWheel", "wheelZoomCanvas", pos[0], pos[1]);
+        }
+        catch { hoverColor = null; }
+        StateHasChanged();
+    }
+
+    private async Task OnWheelTouchEnd(TouchEventArgs e)
+    {
+        // Sélectionner la couleur survolée au moment du relâchement
+        if (hoverColor != null)
+        {
+            selectedColor = hoverColor;
+            selectedHue   = hoverColor.H;
+            lightness     = hoverColor.L;
+            ComputeMix();
+        }
+        isHovering = false;
+        hoverColor = null;
+        await JS.InvokeVoidAsync("chromaMix.hideWheelZoom", "wheelZoomCanvas");
+        StateHasChanged();
+        await JS.InvokeVoidAsync("chromaMix.scrollToResults");
+    }
+
     private async Task OnWheelMouseLeave(MouseEventArgs e)
     {
         isHovering = false;
@@ -609,31 +669,44 @@ else
     }
 
     // ─── Pipette : chargement image ─────────────────────────────────────────────
+    private string? _pendingPipetteDataUrl = null;
+
     private async Task OnImageUpload(InputFileChangeEventArgs e)
     {
-        pipetteImageData = null;
-        pipetteColor     = null;
-        StateHasChanged();
-
+        pipetteColor = null;
         var file = e.File;
         if (file == null) return;
 
-        // Lire le fichier en base64 et l'envoyer au JS
         using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
         using var ms     = new System.IO.MemoryStream();
         await stream.CopyToAsync(ms);
         var base64   = Convert.ToBase64String(ms.ToArray());
-        var mimeType = file.ContentType;
+        var mimeType = string.IsNullOrEmpty(file.ContentType) ? "image/jpeg" : file.ContentType;
         var dataUrl  = $"data:{mimeType};base64,{base64}";
 
-        var dotNetRef = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("chromaMix.loadPipetteFromDataUrl", dataUrl, dotNetRef);
+        // 1. Stocker le dataUrl et afficher le canvas d'abord
+        pipetteImageData       = dataUrl;
+        _pendingPipetteDataUrl = dataUrl;
+        StateHasChanged(); // re-rendu : le canvas apparaît dans le DOM
+    }
+
+    // 2. Une fois le canvas dans le DOM, dessiner l'image
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingPipetteDataUrl != null)
+        {
+            var dataUrl = _pendingPipetteDataUrl;
+            _pendingPipetteDataUrl = null;
+            var dotNetRef = DotNetObjectReference.Create(this);
+            await Task.Delay(30); // s'assurer que le canvas est rendu
+            await JS.InvokeVoidAsync("chromaMix.loadPipetteFromDataUrl", dataUrl, dotNetRef);
+        }
     }
 
     [JSInvokable]
     public async Task OnPipetteImageReady(string dataUrl)
     {
-        pipetteImageData = dataUrl;
+        // Image déjà affichée, juste confirmer
         StateHasChanged();
         await Task.CompletedTask;
     }
